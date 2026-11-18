@@ -209,7 +209,9 @@ export const HistoryImportPage: React.FC = () => {
   const [closeConfirmed, setCloseConfirmed] = useState(false);
   const [applied, setApplied] = useState(false);
 
-  const status = useQuery({ queryKey: historyKeys.status, queryFn: historyImportApi.status });
+  const { blocked: noCompany, company } = useImportCompany();
+  // O estado do histórico é de UMA empresa: no modo "Todas" o servidor responde COMPANY_REQUIRED, então nem pergunta.
+  const status = useQuery({ queryKey: historyKeys.status, queryFn: historyImportApi.status, enabled: !noCompany });
   const batches = useQuery({ queryKey: historyKeys.batches, queryFn: historyImportApi.batches });
   const refresh = () => Promise.all([queryClient.invalidateQueries({ queryKey: historyKeys.status }), queryClient.invalidateQueries({ queryKey: historyKeys.batches })]);
 
@@ -248,8 +250,7 @@ export const HistoryImportPage: React.FC = () => {
     onError: (e) => setError(historyErrorMessage(e, 'Não foi possível encerrar.')),
   });
 
-  const closed = status.data?.isClosed === true;
-  const { blocked: noCompany, company } = useImportCompany();
+  const closed = !noCompany && status.data?.isClosed === true;
   const otherCompany = !!preview?.looksLikeOtherCompany;
   // Passo 1 escolher, 2 pré-visualizar, 3 confirmar; aplicada, os três ficam concluídos.
   const step = applied ? 3 : preview ? 2 : file ? 1 : 0;
@@ -345,6 +346,7 @@ export const HistoryImportPage: React.FC = () => {
         <Table size="small" aria-label="Lotes de importação do histórico">
           <TableHead>
             <TableRow>
+              {noCompany && <TableCell>Empresa</TableCell>}
               <TableCell>Arquivo</TableCell>
               <TableCell>Situação</TableCell>
               <TableCell>Pré-visualizado</TableCell>
@@ -359,6 +361,7 @@ export const HistoryImportPage: React.FC = () => {
           <TableBody>
             {batches.data?.items.map((b) => (
               <TableRow key={b.id} data-testid="history-batch">
+                {noCompany && <TableCell data-testid="batch-company">{b.companyName ?? '—'}</TableCell>}
                 <TableCell>{b.fileName}</TableCell>
                 <TableCell>{b.status === 'Applied' ? 'Aplicado' : 'Só pré-visualizado'}</TableCell>
                 <TableCell>

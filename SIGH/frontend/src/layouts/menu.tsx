@@ -24,6 +24,8 @@ export interface MenuItem {
   isActive?: (pathname: string) => boolean;
   /** Contador de aprovações pendentes. */
   badge?: 'pending-approvals';
+  /** Também aparece no modo "Todas" para quem tem a permissão em alguma empresa (tela só de consulta). */
+  consultInAll?: boolean;
   testId?: string;
 }
 
@@ -62,8 +64,8 @@ export const MAIN_MENU: MenuItem[] = [
 export const ADMIN_MENU: MenuItem[] = [
   { label: 'Usuários', path: '/admin/usuarios', permission: PERMISSIONS.USERS_VIEW, icon: <UserCog size={19} /> },
   { label: 'Gerências', path: '/admin/gerencias', permission: PERMISSIONS.MANAGEMENT_UNITS_MANAGE, icon: <Building2 size={19} /> },
-  { label: 'Importar funcionários', path: '/employees/import', permission: PERMISSIONS.EMPLOYEES_IMPORT, icon: <FileSpreadsheet size={19} /> },
-  { label: 'Importar histórico', path: '/admin/history-import', permission: PERMISSIONS.DISCIPLINARY_HISTORY_IMPORT, icon: <History size={19} /> },
+  { label: 'Importar funcionários', path: '/employees/import', permission: PERMISSIONS.EMPLOYEES_IMPORT, icon: <FileSpreadsheet size={19} />, consultInAll: true },
+  { label: 'Importar histórico', path: '/admin/history-import', permission: PERMISSIONS.DISCIPLINARY_HISTORY_IMPORT, icon: <History size={19} />, consultInAll: true },
   { label: 'Motivos', path: '/disciplinary/infraction-types', permission: PERMISSIONS.DISCIPLINARY_INFRACTION_TYPES_VIEW, icon: <BookOpen size={19} /> },
 ];
 

@@ -109,6 +109,8 @@ export const EmployeeImportPage: React.FC = () => {
 
   const batches = useQuery({ queryKey: employeeKeys.importBatches, queryFn: employeesApi.importBatches });
   const { blocked: noCompany } = useImportCompany();
+  // Modo "Todas": os lotes das empresas do usuário, com a coluna Empresa.
+  const showCompany = noCompany;
 
   const choose = (selected: File | null) => {
     setPreview(null);
@@ -277,6 +279,7 @@ export const EmployeeImportPage: React.FC = () => {
         <Table size="small" aria-label="Histórico de importações">
           <TableHead>
             <TableRow>
+              {showCompany && <TableCell sx={{ fontWeight: 700 }}>Empresa</TableCell>}
               <TableCell sx={{ fontWeight: 700 }}>Data</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Arquivo</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Situação</TableCell>
@@ -288,6 +291,7 @@ export const EmployeeImportPage: React.FC = () => {
           <TableBody>
             {(batches.data?.items ?? []).map((b) => (
               <TableRow key={b.id}>
+                {showCompany && <TableCell data-testid="batch-company">{b.companyName ?? '—'}</TableCell>}
                 <TableCell>{formatDateTime(b.appliedAt ?? b.previewedAt)}</TableCell>
                 <TableCell>{b.fileName}</TableCell>
                 <TableCell>
@@ -302,7 +306,7 @@ export const EmployeeImportPage: React.FC = () => {
             ))}
             {batches.data && batches.data.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={showCompany ? 7 : 6} align="center">
                   Nenhuma importação.
                 </TableCell>
               </TableRow>

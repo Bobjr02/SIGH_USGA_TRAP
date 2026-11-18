@@ -55,11 +55,12 @@ const NavItem: React.FC<{ item: MenuItem; collapsed: boolean; onNavigate?: () =>
 /** Menu lateral: logo, itens do perfil, grupo Administração e, no rodapé, o usuário com o menu e "Sair". */
 export const Sidebar: React.FC<{ collapsed: boolean; onNavigate?: () => void }> = ({ collapsed, onNavigate }) => {
   const navigate = useNavigate();
-  const { user, hasPermission, logout } = useAuth();
+  const { user, hasPermission, canConsult, logout } = useAuth();
+  const visible = (i: MenuItem) => (i.consultInAll ? canConsult(i.permission) : hasPermission(i.permission));
   const { mode, toggleTheme } = useThemeContext();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const main = MAIN_MENU.filter((i) => hasPermission(i.permission));
-  const admin = ADMIN_MENU.filter((i) => hasPermission(i.permission));
+  const main = MAIN_MENU.filter(visible);
+  const admin = ADMIN_MENU.filter(visible);
   const roleLabel = user?.roles.length ? user.roles.map((r) => label('Role', r)).join(', ') : '—';
 
   const handleLogout = async () => {

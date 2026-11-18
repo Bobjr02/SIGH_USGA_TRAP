@@ -28,6 +28,11 @@ interface AuthContextType {
   canSwitchCompany: boolean;
   setActiveCompany: (code: string) => void;
   hasAnyPermission: (permissions: string[]) => boolean;
+  /**
+   * Pode CONSULTAR a tela desta permissão: tem a permissão agora ou, no modo "Todas", em alguma empresa (mesmo sendo
+   * de escrita). Usado pelas telas de importação, que no modo "Todas" mostram os lotes e pedem uma empresa, sem envio.
+   */
+  canConsult: (permission: string) => boolean;
   /** Autentica e carrega o usuário de GET /auth/me. */
   login: (email: string, password: string, rememberMe?: boolean) => Promise<CurrentUser>;
   /** Troca a senha, passa a usar o novo access token e recarrega o usuário. */
@@ -180,6 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permissions,
       hasPermission,
       hasAnyPermission: (perms: string[]) => perms.some(hasPermission),
+      canConsult: (permission: string) => hasPermission(permission) || (isAllCompanies && companies.some((c) => c.permissions.includes(permission))),
       companies,
       activeCompany,
       activeCompanyInfo,

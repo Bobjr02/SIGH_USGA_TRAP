@@ -168,3 +168,94 @@ describe('importação por empresa', () => {
     expect(screen.getByRole('button', { name: 'Confirmar importação' })).toBeDisabled();
   });
 });
+
+describe('modo "Todas": empresa de cada item e nada escolhido implicitamente', () => {
+  const both = (permissions: string[]) => [company('USGA', 'Usina Serra Grande S.A.', permissions), company('TRAP', 'Trapiche', permissions)];
+  const emptyBatches = { items: [], pageNumber: 1, pageSize: 20, totalCount: 0 };
+
+  it('the users list shows the Empresa column only in "Todas"', async () => {
+    window.localStorage.setItem('sigh.company.adm2', 'TODAS');
+    server.use(
+      ...commonHandlers(),
+      meReturns(makeUser({ id: 'adm2', permissions: [], companies: both([PERMISSIONS.USERS_VIEW]) })),
+      http.get(`${API}/users`, () =>
+        ok({
+          items: [
+            { id: 'u-a', fullName: 'Pessoa das duas', email: 'a@x', cpf: '', status: 'Active', mustChangePassword: false, roles: ['Legal'], createdAt: '2026-11-01T00:00:00Z', companies: ['Trapiche', 'Usina Serra Grande S.A.'] },
+          ],
+          pageNumber: 1, pageSize: 20, totalCount: 1, totalPages: 1,
+        }),
+      ),
+    );
+    renderApp('/admin/usuarios');
+    expect(await screen.findByRole('columnheader', { name: 'Empresa' })).toBeInTheDocument();
+    expect(await screen.findByTestId('user-company')).toHaveTextContent('Trapiche, Usina Serra Grande S.A.');
+  });
+
+  it('the employee import opens read-only in "Todas": asks for a company and shows the company of each batch', async () => {
+    window.localStorage.setItem('sigh.company.imp2', 'TODAS');
+    server.use(
+      ...commonHandlers(),
+      meReturns(makeUser({ id: 'imp2', permissions: [], companies: both([PERMISSIONS.EMPLOYEES_IMPORT, PERMISSIONS.EMPLOYEES_VIEW]) })),
+      http.get(`${API}/employees/import/batches`, () =>
+        ok({
+          ...emptyBatches,
+          totalCount: 1,
+          items: [{ id: 'b-1', fileName: 'sap.xlsx', fileSha256: 'x', status: 'Applied', previewedAt: '2026-11-01T00:00:00Z', appliedAt: '2026-11-01T00:00:00Z', summary: { created: 1, updated: 0, terminated: 0, terminatedByAbsence: 0, reactivated: 0, errors: 0 }, massTerminationConfirmed: false, companyName: 'Trapiche' }],
+        }),
+      ),
+    );
+    renderApp('/employees/import');
+    expect(await screen.findByTestId('import-company-required')).toHaveTextContent('Selecione uma empresa');
+    expect(await screen.findByTestId('batch-company')).toHaveTextContent('Trapiche');
+    expect(screen.getByRole('button', { name: 'Pré-visualizar' })).toBeDisabled();
+    expect(screen.getByRole('link', { name: /Importar funcionários/ })).toBeInTheDocument();
+  });
+
+  it('the history import in "Todas" never asks the server for the status and asks for a company', async () => {
+    window.localStorage.setItem('sigh.company.imp3', 'TODAS');
+    let statusCalls = 0;
+    server.use(
+      ...commonHandlers(),
+      meReturns(makeUser({ id: 'imp3', permissions: [], companies: both([PERMISSIONS.DISCIPLINARY_HISTORY_IMPORT]) })),
+      http.get(`${API}/disciplinary-history/import/status`, () => {
+        statusCalls++;
+        return problem(400, 'Selecione uma empresa no topo da tela.', { code: 'COMPANY_REQUIRED' });
+      }),
+      http.get(`${API}/disciplinary-history/import/batches`, () =>
+        ok({
+          ...emptyBatches,
+          totalCount: 1,
+          items: [{ id: 'h-1', fileName: 'penalidades.xlsx', fileSha256: 'x', status: 'Applied', previewedAt: '2026-11-01T00:00:00Z', summary: { totalRows: 1, toImport: 1, existing: 0, toUpdate: 0, rejected: 0, warnings: 0, newInfractionTypes: 0, absent: 0 }, companyName: 'Usina Serra Grande S.A.' }],
+        }),
+      ),
+    );
+    renderApp('/admin/history-import');
+    expect(await screen.findByTestId('import-company-required')).toHaveTextContent('Selecione uma empresa');
+    expect(await screen.findByTestId('batch-company')).toHaveTextContent('Usina Serra Grande S.A.');
+    expect(screen.queryByTestId('history-closed')).not.toBeInTheDocument();
+    expect(statusCalls).toBe(0);
+  });
+
+  it('notifications in "Todas" say the company of each item and never pick a company by companyId', async () => {
+    window.localStorage.setItem('sigh.company.n1', 'TODAS');
+    const items = [
+      { id: 'n-u', companyId: 'USGA-id', companyName: 'Usina Serra Grande S.A.', recipientUserId: 'n1', title: 'Aviso USGA', message: 'm', type: 'Info', priority: 'Medium', createdAt: '2026-11-01T00:00:00Z', isRead: false, isExpired: false },
+      { id: 'n-t', companyId: 'TRAP-id', companyName: 'Trapiche', recipientUserId: 'n1', title: 'Aviso TRAP', message: 'm', type: 'Info', priority: 'Medium', createdAt: '2026-11-01T00:00:00Z', isRead: false, isExpired: false },
+    ];
+    const companiesAsked: (string | null)[] = [];
+    server.use(
+      ...commonHandlers(),
+      meReturns(makeUser({ id: 'n1', permissions: [], companies: both([PERMISSIONS.NOTIFICATIONS_VIEW, PERMISSIONS.NOTIFICATIONS_READ]) })),
+      http.get(`${API}/notifications`, ({ request }) => {
+        companiesAsked.push(new URL(request.url).searchParams.get('companyId'));
+        return ok({ items, pageNumber: 1, pageSize: 10, totalCount: 2, totalPages: 1 });
+      }),
+    );
+    renderApp('/notifications');
+    const chips = await screen.findAllByTestId('notification-company');
+    expect(chips.map((c) => c.textContent)).toEqual(['Usina Serra Grande S.A.', 'Trapiche']);
+    // A tela não escolhe empresa pelo companyId: quem decide é o cabeçalho (todas as empresas da requisição).
+    expect(companiesAsked.every((c) => c === null)).toBe(true);
+  });
+});

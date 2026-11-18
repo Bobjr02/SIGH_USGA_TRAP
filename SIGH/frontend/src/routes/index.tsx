@@ -38,6 +38,13 @@ const guard = (permission: PermissionCode, element: React.ReactNode) => (
   <RequirePermission permission={permission}>{element}</RequirePermission>
 );
 
+/** Telas de importação: no modo "Todas" abrem só para consulta (lotes com a coluna Empresa e "Selecione uma empresa"). */
+const consultGuard = (permission: PermissionCode, element: React.ReactNode) => (
+  <RequirePermission permission={permission} consult>
+    {element}
+  </RequirePermission>
+);
+
 /** O histórico do funcionário agora é uma aba do detalhe. */
 const EmployeeHistoryRedirect: React.FC = () => {
   const { employeeId } = useParams();
@@ -79,7 +86,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/admin/usuarios" element={guard(PERMISSIONS.USERS_VIEW, <UsersPage />)} />
             <Route path="/admin/usuarios/:id" element={guard(PERMISSIONS.USERS_VIEW, <UserDetailPage />)} />
             <Route path="/admin/gerencias" element={guard(PERMISSIONS.MANAGEMENT_UNITS_MANAGE, <ManagementUnitsPage />)} />
-            <Route path="/admin/history-import" element={guard(PERMISSIONS.DISCIPLINARY_HISTORY_IMPORT, <HistoryImportPage />)} />
+            <Route path="/admin/history-import" element={consultGuard(PERMISSIONS.DISCIPLINARY_HISTORY_IMPORT, <HistoryImportPage />)} />
             <Route path="/painel" element={guard(PERMISSIONS.DISCIPLINARY_REPORTS_VIEW_DASHBOARD, <DashboardPage />)} />
             <Route path="/relatorios" element={guard(PERMISSIONS.DISCIPLINARY_REPORTS_VIEW_MEASURES, <ReportsPage />)} />
             {/* Endereços antigos (processo em etapas): o painel e a página única de relatórios os substituem. */}
@@ -90,7 +97,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/disciplinary/reports/employees/history" element={<Navigate to="/employees" replace />} />
             <Route path="/audit" element={guard(PERMISSIONS.AUDIT_VIEW, <AuditPage />)} />
             <Route path="/employees" element={guard(PERMISSIONS.EMPLOYEES_VIEW, <EmployeesListPage />)} />
-            <Route path="/employees/import" element={guard(PERMISSIONS.EMPLOYEES_IMPORT, <EmployeeImportPage />)} />
+            <Route path="/employees/import" element={consultGuard(PERMISSIONS.EMPLOYEES_IMPORT, <EmployeeImportPage />)} />
             <Route path="/employees/:id" element={guard(PERMISSIONS.EMPLOYEES_VIEW, <EmployeeDetailPage />)} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

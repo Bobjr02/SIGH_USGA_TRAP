@@ -42,7 +42,6 @@
   "Disciplinary.InfractionTypes.Activate",
   "Disciplinary.InfractionTypes.Deactivate",
   "Disciplinary.Reports.ViewDashboard",
-  "Disciplinary.Reports.ViewCases",
   "Disciplinary.Reports.ViewMeasures",
   "Disciplinary.Reports.ViewEmployeeHistory",
   "Disciplinary.Reports.Export",

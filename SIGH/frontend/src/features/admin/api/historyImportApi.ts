@@ -103,6 +103,8 @@ export interface HistoryBatch {
   appliedAt?: string | null;
   appliedByName?: string | null;
   summary: HistorySummary;
+  /** Empresa do lote (coluna Empresa no modo "Todas"). */
+  companyName?: string | null;
 }
 
 export interface HistoryStatus {
