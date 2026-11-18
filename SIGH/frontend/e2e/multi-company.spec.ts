@@ -150,7 +150,11 @@ test('multiempresa: Trapiche isolada da USGA, aprovação por empresa, jurídico
 
   // 6. O jurídico vê as duas empresas em "Todas" e não consegue escrever nesse modo.
   const usgaRegistrar = await createUserApi(request, usgaAdmin, { fullName: 'AUXILIAR USGA TESTE', email: `auxiliar.usga.${stamp}@sigh.local`, cpf: syntheticCpf('711000005'), roles: ['HrRegistrar'] });
-  const davi = (await (await request.get('/api/v1/employees?searchTerm=60090004', { headers: authed(usgaAdmin) })).json()).data.items[0];
+  // Um funcionário da USGA que não é o do records.spec (60090004), para não interferir na fila dele.
+  const usgaEmployees: Array<{ id: string; employeeNumber: string; status: number | string }> =
+    (await (await request.get('/api/v1/employees?pageSize=100', { headers: authed(usgaAdmin) })).json()).data.items;
+  const davi = usgaEmployees.find((e) => e.employeeNumber !== '60090004' && (e.status === 2 || e.status === 'Active'))!;
+  expect(davi, 'um funcionário ativo da USGA').toBeTruthy();
   const usgaInfraction = await request.post('/api/v1/infraction-types', { headers: authed(usgaAdmin), data: { code: `USG${stamp % 100000}`, name: 'Atraso na USGA (E2E)', defaultSeverity: 2 } });
   const usgaRecord = await request.post('/api/v1/disciplinary-records', {
     headers: authed(usgaRegistrar.token),
@@ -167,7 +171,7 @@ test('multiempresa: Trapiche isolada da USGA, aprovação por empresa, jurídico
   await expect(legal.getByTestId('company-banner')).toContainText('somente consulta');
   await legal.goto('/medidas');
   await expect(legal.getByTestId('record-company').filter({ hasText: 'Trapiche' }).first()).toBeVisible();
-  await expect(legal.getByTestId('record-row').filter({ hasText: '60090004' }).first()).toBeVisible();
+  await expect(legal.getByTestId('record-row').filter({ hasText: davi.employeeNumber }).first()).toBeVisible();
   await legal.goto(`/medidas/${recordId}`);
   await expect(legal.getByTestId('record-status')).toHaveText('Aprovada');
   await expect(legal.getByRole('button', { name: /Aprovar|Rejeitar|Anexar/ })).toHaveCount(0);
@@ -176,6 +180,11 @@ test('multiempresa: Trapiche isolada da USGA, aprovação por empresa, jurídico
     headers: { ...authed(legalToken), ...company('TODAS') },
     data: { reason: 'Tentativa no modo Todas.' },
   });
-  expect(blocked.status()).toBe(400);
-  expect((await blocked.json()).code).toBe('COMPANY_REQUIRED');
+  expect(blocked.status(), 'o jurídico não tem permissão de escrita em nenhuma empresa').toBe(403);
+  // Quem TEM a permissão de escrita também é recusado no modo "Todas": é preciso escolher a empresa.
+  const allMode = await request.post(`/api/v1/disciplinary-records/${recordId}/approve`, {
+    headers: { ...authed(encarregadoTrap.token), ...company('TODAS') },
+  });
+  expect(allMode.status()).toBe(400);
+  expect((await allMode.json()).code).toBe('COMPANY_REQUIRED');
 });
