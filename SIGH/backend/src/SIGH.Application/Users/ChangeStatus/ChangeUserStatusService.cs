@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using SIGH.Application.Common.Interfaces;
 using SIGH.Application.Interfaces;
 using SIGH.Application.Users.Access;
@@ -13,17 +14,20 @@ public class ChangeUserStatusService : IChangeUserStatusService
     private readonly IUserRepository _userRepository;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly ICurrentUserService? _currentUser;
+    private readonly ICompanyContext? _companies;
 
     public ChangeUserStatusService(
         IApplicationDbContext context,
         IUserRepository userRepository,
         IDateTimeProvider dateTimeProvider,
-        ICurrentUserService? currentUser = null)
+        ICurrentUserService? currentUser = null,
+        ICompanyContext? companies = null)
     {
         _context = context;
         _userRepository = userRepository;
         _dateTimeProvider = dateTimeProvider;
         _currentUser = currentUser;
+        _companies = companies;
     }
 
     public async Task<ChangeUserStatusResponse> ChangeUserStatusAsync(ChangeUserStatusRequest request, CancellationToken cancellationToken = default)
@@ -40,8 +44,19 @@ public class ChangeUserStatusService : IChangeUserStatusService
         if (_currentUser?.UserId is { } actorId)
             UserAccessRules.EnsureNotSelf(actorId, user.Id);
 
+        // O status é da CONTA (todas as empresas): o administrador precisa enxergar o usuário na empresa ativa e ter a
+        // permissão em todas as empresas em que a pessoa tem perfil vigente; senão só retira os perfis da empresa dele.
+        if (_companies is not null)
+        {
+            var companyId = await _companies.RequireWriteCompanyAsync(cancellationToken);
+            if (!await UserCompanyScope.IsVisibleAsync(_context, user.Id, [companyId], cancellationToken))
+                throw new KeyNotFoundException("Usuário não encontrado.");
+            await UserCompanyScope.EnsureAccountWideActionAllowedAsync(_context, _companies, user.Id,
+                SIGH.Application.Common.Authorization.PermissionCodes.Users.ChangeStatus, _dateTimeProvider.UtcNow, cancellationToken);
+        }
+
         if (losesAccess)
-            await UserAccessRules.EnsureNotLastActiveAdministratorAsync(_context, user.Id, _dateTimeProvider.UtcNow, cancellationToken);
+            await UserAccessRules.EnsureNotLastActiveAdministratorAnywhereAsync(_context, user.Id, _dateTimeProvider.UtcNow, cancellationToken);
 
         user.Status = request.NewStatus;
 

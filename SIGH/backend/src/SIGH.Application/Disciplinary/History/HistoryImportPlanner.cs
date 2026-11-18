@@ -22,7 +22,11 @@ public sealed record HistoryReference(
     IReadOnlyList<HistoryUnitRef> Units,
     IReadOnlyDictionary<string, HistoryInfractionRef> InfractionsByKey,
     IReadOnlyDictionary<string, ExistingHistorical> ExistingByKey,
-    IReadOnlyList<CountedMeasure> SighMeasures);
+    IReadOnlyList<CountedMeasure> SighMeasures,
+    /// <summary>Nomes e códigos (normalizados) das gerências de OUTRAS empresas que não existem nesta.</summary>
+    IReadOnlySet<string>? OtherCompanyUnitKeys = null,
+    /// <summary>Prefixo de gerência da empresa ativa (USGA, TRAP): código com outro prefixo é de outra empresa.</summary>
+    string? ManagementUnitPrefix = null);
 
 public sealed record HistoryIssue(int? Row, string? EmployeeNumber, string Severity, string Message);
 public sealed record HistoryFieldChange(string Field, string? OldValue, string? NewValue);
@@ -41,7 +45,13 @@ public sealed record HistoryImportPlan(
     IReadOnlyList<HistoryIssue> Warnings,
     IReadOnlyList<HistoryIssue> Rejected,
     IReadOnlyList<ExistingHistorical> Absent,
-    string Fingerprint);
+    string Fingerprint,
+    /// <summary>Linhas rejeitadas porque a GERÊNCIA é de outra empresa.</summary>
+    int OtherCompanyRows = 0)
+{
+    /// <summary>Mais da metade das linhas é de outra empresa: o arquivo parece ser de outra empresa.</summary>
+    public bool LooksLikeOtherCompany => TotalRows > 0 && OtherCompanyRows * 2 > TotalRows;
+}
 
 /// <summary>
 /// Decide, linha a linha, o que a importação do histórico faria (nada é gravado aqui). Regras (HISTORICO.md):
@@ -62,6 +72,24 @@ public static class HistoryImportPlanner
 
     public const string EmployeeNotFoundMessage = "Funcionário não encontrado — importe a base completa do SAP antes.";
 
+    /// <summary>GERÊNCIA que pertence a outra empresa (nome de uma gerência só dela, ou código com outro prefixo).</summary>
+    public const string OtherCompanyMessage = "gerência de outra empresa — confira se o arquivo é desta empresa";
+
+    /// <summary>A GERÊNCIA da linha é de outra empresa (e não desta)?</summary>
+    private static bool IsOtherCompanyUnit(string unitText, IReadOnlyDictionary<string, HistoryUnitRef> ownUnits, HistoryReference reference)
+    {
+        var key = HistoryKeys.Normalize(unitText);
+        if (key.Length == 0 || ownUnits.ContainsKey(key))
+            return false;
+        if (reference.OtherCompanyUnitKeys?.Contains(key) == true)
+            return true;
+        // Código no formato de Chave Organização (letras + dígitos, ex.: TRAP131) com prefixo de outra empresa.
+        var text = unitText.Trim();
+        var looksLikeCode = System.Text.RegularExpressions.Regex.IsMatch(text, "^[A-Za-z]{2,}[0-9]+$");
+        return looksLikeCode && !string.IsNullOrEmpty(reference.ManagementUnitPrefix)
+               && !text.StartsWith(reference.ManagementUnitPrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static HistoryImportPlan Plan(IReadOnlyList<(int Row, string? EmployeeNumber, HistoryRow? Parsed, string? Error)> rows, HistoryReference reference)
     {
         var warnings = new List<HistoryIssue>();
@@ -75,12 +103,20 @@ public static class HistoryImportPlanner
             .Where(x => x.Key.Length > 0)
             .GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.First().Unit, StringComparer.Ordinal);
         var unitsById = reference.Units.ToDictionary(u => u.Id);
+        var otherCompanyRows = 0;
 
         foreach (var (rowNumber, number, parsed, error) in rows)
         {
             if (parsed is null)
             {
                 rejected.Add(new HistoryIssue(rowNumber, number, RejectedSeverity, error!));
+                continue;
+            }
+
+            if (IsOtherCompanyUnit(parsed.UnitText, unitsByName, reference))
+            {
+                rejected.Add(new HistoryIssue(rowNumber, parsed.EmployeeNumber, RejectedSeverity, $"GERÊNCIA \"{parsed.UnitText}\": {OtherCompanyMessage}."));
+                otherCompanyRows++;
                 continue;
             }
 
@@ -154,7 +190,7 @@ public static class HistoryImportPlanner
         rejected.Sort((a, b) => Nullable.Compare(a.Row, b.Row));
 
         return new HistoryImportPlan(rows.Count, toImport, existing, toUpdate, newInfractions, warnings, rejected, absent,
-            Fingerprint(toImport, existing, toUpdate, absent, newInfractions));
+            Fingerprint(toImport, existing, toUpdate, absent, newInfractions), otherCompanyRows);
     }
 
     /// <summary>

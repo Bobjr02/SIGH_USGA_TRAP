@@ -40,19 +40,35 @@ public sealed partial class RecordQueries : IRecordQueries
     private readonly IAccessScope _scope;
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
+    private readonly ICompanyContext _companies;
 
-    public RecordQueries(IApplicationDbContext db, IAccessScope scope, ICurrentUserService currentUser, IDateTimeProvider clock)
+    public RecordQueries(IApplicationDbContext db, IAccessScope scope, ICurrentUserService currentUser, IDateTimeProvider clock, ICompanyContext companies)
     {
         _db = db;
         _scope = scope;
         _currentUser = currentUser;
         _clock = clock;
+        _companies = companies;
+    }
+
+    /// <summary>
+    /// A ação de escrita sobre um registro da empresa <paramref name="companyId"/> está disponível: empresa ativa
+    /// específica e igual à do registro, com a permissão vigente nela. No modo "Todas" nenhuma ação aparece.
+    /// </summary>
+    private async Task<bool> CanWriteAsync(Guid companyId, string permission, CancellationToken cancellationToken)
+    {
+        var selection = await _companies.GetSelectionAsync(cancellationToken);
+        return !selection.IsAll && selection.CompanyId == companyId
+               && await _companies.HasPermissionAsync(companyId, permission, cancellationToken);
     }
 
     /// <summary>Projeção com inicializador de membros (o EF compõe filtros e ordenação sobre ela no SQL).</summary>
     private sealed class Row
     {
         public Guid Id { get; init; }
+        public Guid CompanyId { get; init; }
+        public string? CompanyCode { get; init; }
+        public string? CompanyName { get; init; }
         public string CaseNumber { get; init; } = string.Empty;
         public DisciplinaryCaseStatus CaseStatus { get; init; }
         public bool HasPendingDecision { get; init; }
@@ -105,9 +121,14 @@ public sealed partial class RecordQueries : IRecordQueries
         from dept in depts.DefaultIfEmpty()
         join user in _db.Users on c.OpenedByUserId equals user.Id into users
         from user in users.DefaultIfEmpty()
+        join company in _db.Companies on c.CompanyId equals company.Id into companies
+        from company in companies.DefaultIfEmpty()
         select new Row
         {
             Id = c.Id,
+            CompanyId = c.CompanyId,
+            CompanyCode = company.Code,
+            CompanyName = company.Name,
             CaseNumber = c.CaseNumber,
             CaseStatus = c.Status,
             HasPendingDecision = c.Decisions.Any(x => x.Status == DecisionStatus.PendingApproval),
@@ -253,9 +274,11 @@ public sealed partial class RecordQueries : IRecordQueries
         var pending = summary.Status == RecordStatus.PendingApproval;
         var rejected = summary.Status == RecordStatus.Rejected;
         var currentDecider = entity.Decision?.DecidedByUserId;
-        var canReview = pending && _currentUser.HasPermission(PermissionCodes.DisciplinaryRecords.Approve)
+        var canReview = pending && await CanWriteAsync(row.CompanyId, PermissionCodes.DisciplinaryRecords.Approve, cancellationToken)
                         && me != entity.OpenedByUserId && me != currentDecider;
-        var canRegister = _currentUser.HasPermission(PermissionCodes.DisciplinaryRecords.Register);
+        var canRegister = await CanWriteAsync(row.CompanyId, PermissionCodes.DisciplinaryRecords.Register, cancellationToken);
+        var canAttach = await CanWriteAsync(row.CompanyId, PermissionCodes.DisciplinaryCases.AddEvidence, cancellationToken);
+        var canRemoveEvidence = await CanWriteAsync(row.CompanyId, PermissionCodes.DisciplinaryCases.RemoveEvidence, cancellationToken);
         // Anexos: pendente, aprovada ou histórico (carta assinada antiga); nunca cancelada.
         var attachable = summary.Status is RecordStatus.PendingApproval or RecordStatus.Approved or RecordStatus.Historical;
 
@@ -285,30 +308,33 @@ public sealed partial class RecordQueries : IRecordQueries
                 CanReject: canReview,
                 CanCorrect: rejected && canRegister,
                 CanCancel: rejected && canRegister,
-                CanAttach: attachable && _currentUser.HasPermission(PermissionCodes.DisciplinaryCases.AddEvidence),
-                CanRemoveEvidence: attachable && _currentUser.HasPermission(PermissionCodes.DisciplinaryCases.RemoveEvidence)));
+                CanAttach: attachable && canAttach,
+                CanRemoveEvidence: attachable && canRemoveEvidence));
     }
 
     public async Task<RecordOptionsDto> GetOptionsAsync(CancellationToken cancellationToken = default)
     {
         var scope = await _scope.GetFilterAsync(cancellationToken);
+        var companyIds = (await _scope.GetCompanyIdsAsync(cancellationToken)).ToList();
 
+        // Motivos: só os das empresas da requisição (cada empresa tem o próprio catálogo).
         var infractionTypes = await _db.InfractionTypes.AsNoTracking()
-            .Where(i => i.IsActive)
+            .Where(i => i.IsActive && companyIds.Contains(i.CompanyId))
             .OrderBy(i => i.Name)
             .Select(i => new OptionDto(i.Id, i.Code, i.Name))
             .ToListAsync(cancellationToken);
 
         // Máscara do escopo: o gestor só vê as próprias gerências (e os setores delas) nos filtros.
+        var full = scope.FullCompanyIds.ToList();
         var unitIds = scope.ManagementUnitIds.ToList();
         var units = await _db.ManagementUnits.AsNoTracking()
-            .Where(m => scope.All || unitIds.Contains(m.Id))
+            .Where(m => full.Contains(m.CompanyId) || unitIds.Contains(m.Id))
             .OrderBy(m => m.Code)
             .Select(m => new OptionDto(m.Id, m.Code, m.Name))
             .ToListAsync(cancellationToken);
 
         var departments = await _db.Departments.AsNoTracking()
-            .Where(d => scope.All || unitIds.Contains(d.ManagementUnitId))
+            .Where(d => full.Contains(d.CompanyId) || unitIds.Contains(d.ManagementUnitId))
             .OrderBy(d => d.Name)
             .Select(d => new OptionDto(d.Id, d.Code, d.Name))
             .ToListAsync(cancellationToken);
@@ -322,10 +348,13 @@ public sealed partial class RecordQueries : IRecordQueries
 
     public async Task<int> CountPendingForApprovalAsync(CancellationToken cancellationToken = default)
     {
-        if (!_currentUser.HasPermission(PermissionCodes.DisciplinaryRecords.Approve) || _currentUser.UserId is not { } me)
+        if (_currentUser.UserId is not { } me)
             return 0;
 
-        var cases = await VisibleRecordsAsync(cancellationToken);
+        // Só nas empresas em que o usuário aprova (a rota exige Approve: as empresas da requisição já são essas).
+        var approverCompanies = (await _companies.GetRequestGrantsAsync(cancellationToken))
+            .Where(g => g.Has(PermissionCodes.DisciplinaryRecords.Approve)).Select(g => g.CompanyId).ToList();
+        var cases = (await VisibleRecordsAsync(cancellationToken)).Where(c => approverCompanies.Contains(c.CompanyId));
         return await cases.CountAsync(c => c.Status == DisciplinaryCaseStatus.AwaitingDecision
                                            && c.OpenedByUserId != me
                                            && c.Decisions.Any(d => d.Status == DecisionStatus.PendingApproval && d.DecidedByUserId != me),
@@ -361,7 +390,10 @@ public sealed partial class RecordQueries : IRecordQueries
             row.ApprovedAt,
             DaysToApproval(row),
             type == DisciplinaryMeasureType.Suspension ? start : null,
-            type == DisciplinaryMeasureType.Suspension ? end : null);
+            type == DisciplinaryMeasureType.Suspension ? end : null,
+            row.CompanyId,
+            row.CompanyCode,
+            row.CompanyName);
     }
 
     /// <summary>Dias corridos entre o registro e a aprovação (calendário de Maceió).</summary>

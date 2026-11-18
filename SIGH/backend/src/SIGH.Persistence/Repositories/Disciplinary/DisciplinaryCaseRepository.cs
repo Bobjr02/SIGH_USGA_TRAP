@@ -19,15 +19,28 @@ public class DisciplinaryCaseRepository : IDisciplinaryCaseRepository
         _scope = scope;
     }
 
+    /// <summary>
+    /// Processos ao alcance da requisição (empresa ativa e escopo por gerência). Numa escrita a empresa da requisição é
+    /// a ativa: um processo de outra empresa "não existe" (404). Sem usuário (workers), sem restrição.
+    /// </summary>
+    private async Task<IQueryable<DisciplinaryCase>> ReachableAsync(CancellationToken cancellationToken)
+    {
+        IQueryable<DisciplinaryCase> cases = _context.DisciplinaryCases;
+        if (_scope is null || !_scope.AppliesToRequest)
+            return cases;
+        var filter = await _scope.GetFilterAsync(cancellationToken);
+        return SIGH.Application.Common.Authorization.AccessScopeQueryExtensions.InScope(cases, _context.DisciplinaryCaseEmployees, _context.Employees, filter);
+    }
+
     public async Task<DisciplinaryCase?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.DisciplinaryCases
+        return await (await ReachableAsync(cancellationToken))
             .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
     }
 
     public async Task<DisciplinaryCase?> GetByIdWithDetailsAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.DisciplinaryCases
+        return await (await ReachableAsync(cancellationToken))
             .AsSplitQuery()
             .Include(c => c.Occurrences)
             .Include(c => c.Employees)

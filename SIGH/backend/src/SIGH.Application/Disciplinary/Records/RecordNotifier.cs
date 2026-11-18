@@ -40,17 +40,17 @@ public sealed class RecordNotifier : IRecordNotifier
         _app = app.Value;
     }
 
-    /// <summary>Usuários ativos com a permissão de aprovar (perfil vigente agora).</summary>
-    public static IQueryable<SIGH.Domain.Entities.User> Approvers(IApplicationDbContext db, DateTimeOffset now) =>
+    /// <summary>Usuários ativos com a permissão de aprovar NA EMPRESA informada (perfil vigente agora nela).</summary>
+    public static IQueryable<SIGH.Domain.Entities.User> Approvers(IApplicationDbContext db, DateTimeOffset now, Guid companyId) =>
         db.Users.Where(u => u.Status == UserStatus.Active
-                            && u.UserRoles.Any(ur => !ur.IsDeleted
+                            && u.UserRoles.Any(ur => !ur.IsDeleted && ur.CompanyId == companyId
                                                      && (ur.ValidFrom == null || ur.ValidFrom <= now)
                                                      && (ur.ValidUntil == null || ur.ValidUntil > now)
                                                      && ur.Role.RolePermissions.Any(rp => !rp.IsDeleted && rp.Permission.Code == PermissionCodes.DisciplinaryRecords.Approve)));
 
     public async Task RecordRegisteredAsync(Guid companyId, Guid recordId, string caseNumber, string measureLabel, Guid registrantUserId, bool resubmitted, CancellationToken cancellationToken)
     {
-        var approvers = await Approvers(_db, DateTimeOffset.UtcNow)
+        var approvers = await Approvers(_db, DateTimeOffset.UtcNow, companyId)
             .Where(u => u.Id != registrantUserId)
             .Select(u => new { u.Id, u.FullName, u.Email })
             .ToListAsync(cancellationToken);
@@ -83,7 +83,17 @@ public sealed class RecordNotifier : IRecordNotifier
         if (_options.NotifyByEmail && !string.IsNullOrWhiteSpace(email))
         {
             var link = _app.BuildUrl(recordId is { } id ? $"/medidas/{id}" : "/medidas/aprovacoes");
-            _outbox.Enqueue(email, EmailTemplates.RecordNotice(fullName, title, message, link));
+            _outbox.Enqueue(email, EmailTemplates.RecordNotice(fullName, title, message, link, CompanyName(companyId)));
         }
+    }
+
+    private readonly Dictionary<Guid, string?> _companyNames = new();
+
+    /// <summary>Nome de exibição da empresa, para o e-mail (cache da operação).</summary>
+    private string? CompanyName(Guid companyId)
+    {
+        if (!_companyNames.TryGetValue(companyId, out var name))
+            _companyNames[companyId] = name = _db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => c.Name).FirstOrDefault();
+        return name;
     }
 }

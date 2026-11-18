@@ -20,6 +20,7 @@ public class CreateUserService : ICreateUserService
     private readonly SIGH.Application.Email.IEmailOutbox? _outbox;
     private readonly IRandomStringGenerator? _random;
     private readonly AppOptions _appOptions;
+    private readonly SIGH.Application.Common.Authorization.ICompanyContext? _companies;
 
     public CreateUserService(
         IApplicationDbContext context,
@@ -29,8 +30,10 @@ public class CreateUserService : ICreateUserService
         SIGH.Application.Authentication.PasswordTokens.IPasswordTokenService? tokens = null,
         SIGH.Application.Email.IEmailOutbox? outbox = null,
         IRandomStringGenerator? random = null,
-        IOptions<AppOptions>? appOptions = null)
+        IOptions<AppOptions>? appOptions = null,
+        SIGH.Application.Common.Authorization.ICompanyContext? companies = null)
     {
+        _companies = companies;
         _tokens = tokens;
         _outbox = outbox;
         _random = random;
@@ -62,9 +65,20 @@ public class CreateUserService : ICreateUserService
         var email = request.Email.Trim().ToLowerInvariant();
         var cpf = request.Cpf.Trim();
 
+        // A conta nasce na empresa ATIVA do administrador, com os perfis nela.
+        var companyId = _companies is null
+            ? SIGH.Application.Common.Authorization.CompanyDefaults.UsgaId
+            : await _companies.RequireWriteCompanyAsync(cancellationToken);
+
         bool emailExists = await _userRepository.ExistsByEmailAsync(email, cancellationToken);
         if (emailExists)
         {
+            // E-mail de uma conta que o administrador não enxerga (outra empresa do grupo): oferece o vínculo, sem
+            // criar outra conta e sem mostrar os perfis que a pessoa tem na outra empresa.
+            var existingId = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
+                System.Linq.Queryable.Select(System.Linq.Queryable.Where(_context.Users, u => u.Email == email), u => (Guid?)u.Id), cancellationToken);
+            if (existingId is { } id && !await Access.UserCompanyScope.IsVisibleAsync(_context, id, [companyId], cancellationToken))
+                throw new ExistingUserCanBeLinkedException();
             throw new BusinessRuleValidationException("Já existe um usuário cadastrado com este e-mail corporativo.");
         }
 
@@ -95,8 +109,9 @@ public class CreateUserService : ICreateUserService
 
         if (managementUnitIds.Count > 0)
         {
+            // Só gerências da empresa em que a conta está sendo criada.
             var found = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
-                _context.ManagementUnits, m => managementUnitIds.Contains(m.Id), cancellationToken);
+                _context.ManagementUnits, m => managementUnitIds.Contains(m.Id) && m.CompanyId == companyId, cancellationToken);
             if (found != managementUnitIds.Count)
                 throw new BusinessRuleValidationException("Uma ou mais gerências informadas não existem.");
         }
@@ -111,7 +126,8 @@ public class CreateUserService : ICreateUserService
             PasswordHash = passwordHash,
             Status = UserStatus.PendingFirstAccess,
             MustChangePassword = true,
-            FailedLoginAttempts = 0
+            FailedLoginAttempts = 0,
+            CreatedInCompanyId = companyId
         };
 
         foreach (var role in roles)
@@ -119,7 +135,8 @@ public class CreateUserService : ICreateUserService
             user.UserRoles.Add(new UserRole
             {
                 UserId = user.Id,
-                RoleId = role.Id
+                RoleId = role.Id,
+                CompanyId = companyId
             });
         }
 
@@ -160,4 +177,16 @@ public class CreateUserService : ICreateUserService
             user.MustChangePassword
         );
     }
+}
+
+/// <summary>
+/// O e-mail já é de uma conta de outra empresa do grupo: a tela oferece "vincular este usuário à empresa"
+/// (POST /api/v1/users/link). Resposta 409 com o código <see cref="ErrorCode"/>.
+/// </summary>
+public sealed class ExistingUserCanBeLinkedException : BusinessRuleValidationException
+{
+    public const string ErrorCode = "USER_EXISTS_IN_ANOTHER_COMPANY";
+
+    public ExistingUserCanBeLinkedException()
+        : base("Já existe uma conta com este e-mail em outra empresa do grupo. Você pode vincular este usuário a esta empresa, atribuindo perfis aqui, sem criar outra conta.") { }
 }

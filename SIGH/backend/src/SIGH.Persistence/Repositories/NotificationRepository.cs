@@ -12,11 +12,31 @@ public class NotificationRepository : INotificationRepository
 {
     private readonly SighDbContext _context;
     private readonly SIGH.Application.Common.Authorization.IAccessScope? _scope;
+    private readonly SIGH.Application.Common.Authorization.ICompanyContext? _companies;
 
-    public NotificationRepository(SighDbContext context, SIGH.Application.Common.Authorization.IAccessScope? scope = null)
+    public NotificationRepository(
+        SighDbContext context,
+        SIGH.Application.Common.Authorization.IAccessScope? scope = null,
+        SIGH.Application.Common.Authorization.ICompanyContext? companies = null)
     {
         _context = context;
         _scope = scope;
+        _companies = companies;
+    }
+
+    /// <summary>
+    /// Empresas cujas notificações a requisição enxerga: a informada (se estiver entre as da requisição) ou, no modo
+    /// "Todas", todas as empresas da requisição. Sem contexto (testes de unidade, workers): só a informada.
+    /// </summary>
+    private async Task<IReadOnlyCollection<Guid>> CompaniesAsync(Guid companyId, CancellationToken cancellationToken)
+    {
+        if (_scope is null || _companies is null)
+            return new[] { companyId };
+
+        var allowed = await _scope.GetCompanyIdsAsync(cancellationToken);
+        if ((await _companies.GetSelectionAsync(cancellationToken)).IsAll)
+            return allowed;
+        return allowed.Contains(companyId) ? new[] { companyId } : Array.Empty<Guid>();
     }
 
     /// <summary>
@@ -25,16 +45,14 @@ public class NotificationRepository : INotificationRepository
     /// </summary>
     private async Task<IQueryable<Notification>> UserNotificationsAsync(Guid companyId, Guid userId, CancellationToken cancellationToken)
     {
-        var query = _context.Notifications.AsNoTracking().Where(n => n.CompanyId == companyId && n.UserId == userId);
+        var companies = (await CompaniesAsync(companyId, cancellationToken)).ToList();
+        var query = _context.Notifications.AsNoTracking().Where(n => companies.Contains(n.CompanyId) && n.UserId == userId);
         if (_scope is null)
             return query;
 
         var filter = await _scope.GetFilterAsync(cancellationToken);
-        if (filter.All)
-            return query;
-
         var visibleCases = SIGH.Application.Common.Authorization.AccessScopeQueryExtensions.VisibleCaseIds(
-            _context.DisciplinaryCaseEmployees, _context.Employees, filter);
+            _context.DisciplinaryCases, _context.DisciplinaryCaseEmployees, _context.Employees, filter);
         return query.Where(n => n.DisciplinaryCaseId == null || visibleCases.Contains(n.DisciplinaryCaseId.Value));
     }
 
@@ -51,8 +69,9 @@ public class NotificationRepository : INotificationRepository
 
     public async Task<Notification?> GetByIdForUserAsync(Guid id, Guid companyId, Guid userId, CancellationToken cancellationToken = default)
     {
+        var companies = (await CompaniesAsync(companyId, cancellationToken)).ToList();
         return await _context.Notifications
-            .FirstOrDefaultAsync(n => n.Id == id && n.CompanyId == companyId && n.UserId == userId, cancellationToken);
+            .FirstOrDefaultAsync(n => n.Id == id && companies.Contains(n.CompanyId) && n.UserId == userId, cancellationToken);
     }
 
     public async Task<PagedResult<NotificationDto>> GetPagedUserNotificationsAsync(
@@ -190,8 +209,9 @@ public class NotificationRepository : INotificationRepository
         DateTimeOffset readAt,
         CancellationToken cancellationToken = default)
     {
+        var companies = (await CompaniesAsync(companyId, cancellationToken)).ToList();
         var unreadNotifications = await _context.Notifications
-            .Where(n => n.CompanyId == companyId && n.UserId == userId && !n.IsRead)
+            .Where(n => companies.Contains(n.CompanyId) && n.UserId == userId && !n.IsRead)
             .ToListAsync(cancellationToken);
 
         if (!unreadNotifications.Any())

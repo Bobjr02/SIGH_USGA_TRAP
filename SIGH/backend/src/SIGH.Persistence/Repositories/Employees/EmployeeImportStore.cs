@@ -17,12 +17,9 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
         _logger = logger;
     }
 
-    /// <summary>Instalação de empresa única: tudo vai para a empresa padrão.</summary>
-    public Guid CompanyId => DatabaseSeeder.DefaultCompanyId;
-
-    public async Task<(IReadOnlyList<EmployeeSnapshot> Employees, ReferenceSnapshot References)> LoadSnapshotAsync(CancellationToken cancellationToken)
+    /// <summary>Base da EMPRESA da importação (a empresa ativa de quem importa).</summary>
+    public async Task<(IReadOnlyList<EmployeeSnapshot> Employees, ReferenceSnapshot References)> LoadSnapshotAsync(Guid companyId, CancellationToken cancellationToken)
     {
-        var companyId = CompanyId;
         var jobs = await _context.JobTitles.AsNoTracking().Where(j => j.CompanyId == companyId && j.Code != null)
             .Select(j => new { j.Id, Code = j.Code!, j.Name }).ToListAsync(cancellationToken);
         var depts = await _context.Departments.AsNoTracking().Where(d => d.CompanyId == companyId && d.Code != null)
@@ -57,8 +54,9 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
         return (snapshots, references);
     }
 
-    public Task<EmployeeImportBatch?> GetBatchAsync(Guid batchId, CancellationToken cancellationToken) =>
-        _context.EmployeeImportBatches.FirstOrDefaultAsync(b => b.Id == batchId, cancellationToken);
+    /// <summary>Lote de outra empresa: "não existe".</summary>
+    public Task<EmployeeImportBatch?> GetBatchAsync(Guid batchId, Guid companyId, CancellationToken cancellationToken) =>
+        _context.EmployeeImportBatches.FirstOrDefaultAsync(b => b.Id == batchId && b.CompanyId == companyId, cancellationToken);
 
     public async Task AddBatchAsync(EmployeeImportBatch batch, CancellationToken cancellationToken)
     {
@@ -68,7 +66,7 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
 
     public async Task ApplyAsync(EmployeeImportPlan plan, EmployeeImportBatch batch, DateOnly importDate, Guid actorUserId, bool massTerminationConfirmed, CancellationToken cancellationToken)
     {
-        var companyId = CompanyId;
+        var companyId = batch.CompanyId;
         var strategy = _context.Database.CreateExecutionStrategy();
 
         await strategy.ExecuteAsync(async () =>
@@ -166,11 +164,12 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
         });
     }
 
-    public async Task<PagedResult<EmployeeImportBatchDto>> ListBatchesAsync(int pageNumber, int pageSize, CancellationToken cancellationToken)
+    public async Task<PagedResult<EmployeeImportBatchDto>> ListBatchesAsync(IReadOnlyCollection<Guid> companyIds, int pageNumber, int pageSize, CancellationToken cancellationToken)
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = _context.EmployeeImportBatches.AsNoTracking();
+        var ids = companyIds.ToList();
+        var query = _context.EmployeeImportBatches.AsNoTracking().Where(b => ids.Contains(b.CompanyId));
         var total = await query.CountAsync(cancellationToken);
 
         var items = await query.OrderByDescending(b => b.PreviewedAt)
@@ -178,6 +177,7 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
             .Select(b => new
             {
                 Batch = b,
+                CompanyName = _context.Companies.Where(c => c.Id == b.CompanyId).Select(c => c.Name).FirstOrDefault(),
                 PreviewedBy = _context.Users.IgnoreQueryFilters().Where(u => u.Id == b.PreviewedByUserId).Select(u => u.FullName).FirstOrDefault(),
                 AppliedBy = _context.Users.IgnoreQueryFilters().Where(u => u.Id == b.AppliedByUserId).Select(u => u.FullName).FirstOrDefault()
             })
@@ -188,7 +188,8 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
             x.Batch.PreviewedAt, x.PreviewedBy, x.Batch.AppliedAt, x.AppliedBy,
             new ImportSummaryDto(x.Batch.TotalRows, x.Batch.CreatedCount, x.Batch.UpdatedCount, x.Batch.TerminatedCount,
                 x.Batch.TerminatedByAbsenceCount, x.Batch.ReactivatedCount, x.Batch.UnchangedCount, x.Batch.ErrorCount, x.Batch.WarningCount),
-            x.Batch.MassTerminationConfirmed)).ToList();
+            x.Batch.MassTerminationConfirmed,
+            x.CompanyName)).ToList();
 
         return new PagedResult<EmployeeImportBatchDto>(dtos, pageNumber, pageSize, total);
     }

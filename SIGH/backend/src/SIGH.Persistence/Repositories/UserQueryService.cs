@@ -7,10 +7,12 @@ namespace SIGH.Persistence.Repositories;
 public class UserQueryService : IUserQueryService
 {
     private readonly SighDbContext _context;
+    private readonly SIGH.Application.Common.Authorization.ICompanyContext? _companies;
 
-    public UserQueryService(SighDbContext context)
+    public UserQueryService(SighDbContext context, SIGH.Application.Common.Authorization.ICompanyContext? companies = null)
     {
         _context = context;
+        _companies = companies;
     }
 
     public async Task<PagedList<UserSummaryDto>> GetUsersPagedAsync(GetUsersQuery query, CancellationToken cancellationToken = default)
@@ -20,6 +22,15 @@ public class UserQueryService : IUserQueryService
                 .ThenInclude(ur => ur.Role)
             .AsNoTracking()
             .Where(u => !u.IsDeleted);
+
+        // O administrador só vê os usuários das empresas dele (perfil, mesmo retirado, ou conta criada nelas).
+        List<Guid>? companyIds = null;
+        if (_companies is not null)
+        {
+            companyIds = (await _companies.GetRequestGrantsAsync(cancellationToken)).Select(g => g.CompanyId).ToList();
+            var visible = SIGH.Application.Users.Access.UserCompanyScope.VisibleUserIds(_context, companyIds);
+            dbQuery = dbQuery.Where(u => visible.Contains(u.Id));
+        }
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
@@ -54,7 +65,7 @@ public class UserQueryService : IUserQueryService
             u.Status.ToString(),
             u.MustChangePassword,
             u.UserRoles
-                .Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted)
+                .Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted && (companyIds == null || companyIds.Contains(ur.CompanyId)))
                 .Select(ur => ur.Role.Name)
                 .Distinct()
                 .ToList(),

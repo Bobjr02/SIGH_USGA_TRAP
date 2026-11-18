@@ -49,9 +49,11 @@ public sealed partial class RecordQueries
             .Take(MaxExportRows)
             .ToListAsync(cancellationToken);
 
+        // Modo "Todas": a primeira coluna diz de qual empresa é cada medida.
+        var withCompany = (await _companies.GetSelectionAsync(cancellationToken)).IsAll;
         var csv = new StringBuilder();
         csv.Append('﻿'); // BOM: o Excel em pt-BR abre com acentos corretos.
-        csv.AppendLine(string.Join(CsvSeparator,
+        csv.AppendLine((withCompany ? "Empresa" + CsvSeparator : string.Empty) + string.Join(CsvSeparator,
             "Número", "Matrícula", "Funcionário", "Gerência", "Setor", "Medida", "Motivo", "Data da medida",
             "Início da suspensão", "Fim da suspensão", "Dias de suspensão", "Situação", "Origem",
             "Registrada por", "Registrada em", "Aplicado por", "Aprovada em", "Dias até a aprovação"));
@@ -59,7 +61,7 @@ public sealed partial class RecordQueries
         foreach (var summary in rows.Select(ToSummary))
         {
             var appliedBy = summary.Origin == RecordOrigin.Historical ? "Histórico importado" : summary.AppliedByName;
-            csv.AppendLine(string.Join(CsvSeparator,
+            csv.AppendLine((withCompany ? Field(summary.CompanyName) + CsvSeparator : string.Empty) + string.Join(CsvSeparator,
                 Field(summary.CaseNumber),
                 Field(summary.EmployeeNumber),
                 Field(summary.EmployeeName),

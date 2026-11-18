@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SIGH.Application.Common.Authorization;
 using SIGH.Application.Common.Models;
 using SIGH.Application.Interfaces;
 using SIGH.Domain.Employees.Entities;
@@ -28,6 +29,10 @@ public static class EmployeeImportErrors
     public const string FileMismatch = "EmployeeImport.FileMismatch";
     public const string PlanChanged = "EmployeeImport.PlanChanged";
     public const string MassTerminationNotConfirmed = "EmployeeImport.MassTerminationNotConfirmed";
+    public const string OtherCompanyFile = "EmployeeImport.OtherCompanyFile";
+
+    public const string OtherCompanyFileMessage =
+        "Este arquivo parece ser de outra empresa: mais da metade das linhas tem Chave Organização de outra empresa. Confira o arquivo e a empresa selecionada no topo.";
 }
 
 public sealed record ImportIssueDto(int? Row, string? EmployeeNumber, string Severity, string Message);
@@ -53,24 +58,30 @@ public sealed record EmployeeImportPreviewDto(
     int ActiveBefore,
     double AbsenceTerminationPercent,
     double MaxTerminationPercent,
-    bool RequiresMassTerminationConfirmation);
+    bool RequiresMassTerminationConfirmation,
+    /// <summary>Empresa para a qual o arquivo está indo ("Importando para: Trapiche").</summary>
+    string CompanyCode = "",
+    string CompanyName = "",
+    /// <summary>Linhas rejeitadas por Chave Organização de outra empresa.</summary>
+    int OtherCompanyRows = 0,
+    /// <summary>Mais da metade das linhas é de outra empresa: alerta grande no topo (e a confirmação é recusada).</summary>
+    bool LooksLikeOtherCompany = false);
 
 public sealed record EmployeeImportResultDto(Guid BatchId, ImportSummaryDto Summary, DateTimeOffset AppliedAt);
 
 public sealed record EmployeeImportBatchDto(
     Guid Id, string FileName, string FileSha256, string Status, DateTimeOffset PreviewedAt, string? PreviewedByName,
-    DateTimeOffset? AppliedAt, string? AppliedByName, ImportSummaryDto Summary, bool MassTerminationConfirmed);
+    DateTimeOffset? AppliedAt, string? AppliedByName, ImportSummaryDto Summary, bool MassTerminationConfirmed, string? CompanyName = null);
 
 /// <summary>Acesso ao banco da importação (implementado na Persistence).</summary>
 public interface IEmployeeImportStore
 {
-    Guid CompanyId { get; }
-    Task<(IReadOnlyList<EmployeeSnapshot> Employees, ReferenceSnapshot References)> LoadSnapshotAsync(CancellationToken cancellationToken);
-    Task<EmployeeImportBatch?> GetBatchAsync(Guid batchId, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<EmployeeSnapshot> Employees, ReferenceSnapshot References)> LoadSnapshotAsync(Guid companyId, CancellationToken cancellationToken);
+    Task<EmployeeImportBatch?> GetBatchAsync(Guid batchId, Guid companyId, CancellationToken cancellationToken);
     Task AddBatchAsync(EmployeeImportBatch batch, CancellationToken cancellationToken);
-    /// <summary>Aplica o plano e marca o lote como aplicado, numa transação.</summary>
+    /// <summary>Aplica o plano na empresa do lote e marca o lote como aplicado, numa transação.</summary>
     Task ApplyAsync(EmployeeImportPlan plan, EmployeeImportBatch batch, DateOnly importDate, Guid actorUserId, bool massTerminationConfirmed, CancellationToken cancellationToken);
-    Task<PagedResult<EmployeeImportBatchDto>> ListBatchesAsync(int pageNumber, int pageSize, CancellationToken cancellationToken);
+    Task<PagedResult<EmployeeImportBatchDto>> ListBatchesAsync(IReadOnlyCollection<Guid> companyIds, int pageNumber, int pageSize, CancellationToken cancellationToken);
 }
 
 public interface IEmployeeImportService
@@ -97,42 +108,55 @@ public sealed class EmployeeImportService : IEmployeeImportService
     private readonly IDateTimeProvider _clock;
     private readonly ImportOptions _options;
     private readonly ILogger<EmployeeImportService> _logger;
+    private readonly ICompanyContext _companies;
 
     public EmployeeImportService(
         IHrSpreadsheetReader reader,
         IEmployeeImportStore store,
         IDateTimeProvider clock,
         IOptions<ImportOptions> options,
-        ILogger<EmployeeImportService> logger)
+        ILogger<EmployeeImportService> logger,
+        ICompanyContext companies)
     {
         _reader = reader;
         _store = store;
         _clock = clock;
         _options = options.Value;
         _logger = logger;
+        _companies = companies;
+    }
+
+    /// <summary>A importação vai SEMPRE para a empresa ativa (específica).</summary>
+    private async Task<CompanyInfo> WriteCompanyAsync(CancellationToken cancellationToken)
+    {
+        var companyId = await _companies.RequireWriteCompanyAsync(cancellationToken);
+        return (await _companies.GetGrantsAsync(cancellationToken)).Single(g => g.CompanyId == companyId).Company;
     }
 
     public async Task<Result<EmployeeImportPreviewDto>> PreviewAsync(Stream file, string fileName, Guid actorUserId, CancellationToken cancellationToken = default)
     {
-        var (hash, plan, error) = await BuildPlanAsync(file, cancellationToken);
+        var company = await WriteCompanyAsync(cancellationToken);
+        var (hash, plan, error) = await BuildPlanAsync(file, company, cancellationToken);
         if (plan is null)
             return Result<EmployeeImportPreviewDto>.Failure(error!, EmployeeImportErrors.InvalidFile);
 
         var now = _clock.UtcNow;
         var batch = EmployeeImportBatch.CreatePreview(fileName, hash, actorUserId, now,
             TimeSpan.FromMinutes(Math.Max(1, _options.PreviewValidityMinutes)), Counts(plan), plan.Fingerprint, IssuesJson(plan));
+        batch.AssignToCompany(company.Id);
         await _store.AddBatchAsync(batch, cancellationToken);
 
         // Só contagens no log: nunca nomes, CPFs ou conteúdo de células.
         _logger.LogInformation("Importação de funcionários: pré-visualização {BatchId} ({Rows} linhas, {Errors} erros).",
             batch.Id, plan.TotalRows, plan.ErrorCount);
 
-        return Result<EmployeeImportPreviewDto>.Ok(ToPreview(batch, plan));
+        return Result<EmployeeImportPreviewDto>.Ok(ToPreview(batch, plan, company));
     }
 
     public async Task<Result<EmployeeImportResultDto>> ConfirmAsync(Guid batchId, Stream file, bool confirmMassTermination, Guid actorUserId, CancellationToken cancellationToken = default)
     {
-        var batch = await _store.GetBatchAsync(batchId, cancellationToken);
+        var company = await WriteCompanyAsync(cancellationToken);
+        var batch = await _store.GetBatchAsync(batchId, company.Id, cancellationToken);
         if (batch is null)
             return Result<EmployeeImportResultDto>.Failure("Pré-visualização não encontrada.", EmployeeImportErrors.BatchNotFound);
         if (batch.Status == EmployeeImportBatchStatus.Applied)
@@ -140,9 +164,12 @@ public sealed class EmployeeImportService : IEmployeeImportService
         if (batch.IsExpired(_clock.UtcNow))
             return Result<EmployeeImportResultDto>.Failure("A pré-visualização expirou. Envie o arquivo de novo.", EmployeeImportErrors.BatchExpired);
 
-        var (hash, plan, error) = await BuildPlanAsync(file, cancellationToken);
+        var (hash, plan, error) = await BuildPlanAsync(file, company, cancellationToken);
         if (plan is null)
             return Result<EmployeeImportResultDto>.Failure(error!, EmployeeImportErrors.InvalidFile);
+        // Arquivo que parece de outra empresa nunca é aplicado: desligaria por ausência os funcionários desta.
+        if (plan.LooksLikeOtherCompany)
+            return Result<EmployeeImportResultDto>.Failure(EmployeeImportErrors.OtherCompanyFileMessage, EmployeeImportErrors.OtherCompanyFile);
         if (!string.Equals(hash, batch.FileSha256, StringComparison.OrdinalIgnoreCase))
             return Result<EmployeeImportResultDto>.Failure("O arquivo enviado não é o mesmo da pré-visualização.", EmployeeImportErrors.FileMismatch);
         if (plan.Fingerprint != batch.PlanFingerprint)
@@ -165,13 +192,16 @@ public sealed class EmployeeImportService : IEmployeeImportService
         return Result<EmployeeImportResultDto>.Ok(new EmployeeImportResultDto(batch.Id, Summary(Counts(plan)), batch.AppliedAt!.Value));
     }
 
-    public Task<PagedResult<EmployeeImportBatchDto>> ListBatchesAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default) =>
-        _store.ListBatchesAsync(pageNumber, pageSize, cancellationToken);
+    public async Task<PagedResult<EmployeeImportBatchDto>> ListBatchesAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var companyIds = (await _companies.GetRequestGrantsAsync(cancellationToken)).Select(g => g.CompanyId).ToList();
+        return await _store.ListBatchesAsync(companyIds, pageNumber, pageSize, cancellationToken);
+    }
 
     /// <summary>Data da importação no fuso de Brasília (usada como Data demissão dos ausentes).</summary>
     private DateOnly ImportDate() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_clock.UtcNow, Brasilia).DateTime);
 
-    private async Task<(string Hash, EmployeeImportPlan? Plan, string? Error)> BuildPlanAsync(Stream file, CancellationToken cancellationToken)
+    private async Task<(string Hash, EmployeeImportPlan? Plan, string? Error)> BuildPlanAsync(Stream file, CompanyInfo company, CancellationToken cancellationToken)
     {
         // Lê para memória: precisamos do hash e de um stream seekable para o leitor.
         using var buffer = new MemoryStream();
@@ -190,8 +220,9 @@ public sealed class EmployeeImportService : IEmployeeImportService
             return (hash, null, ex.Message);
         }
 
-        var (employees, references) = await _store.LoadSnapshotAsync(cancellationToken);
-        var plan = EmployeeImportPlanner.Plan(sheet.Rows, sheet.Warnings, employees, references, ImportDate(), _options.MaxTerminationPercent);
+        var (employees, references) = await _store.LoadSnapshotAsync(company.Id, cancellationToken);
+        var plan = EmployeeImportPlanner.Plan(sheet.Rows, sheet.Warnings, employees, references, ImportDate(), _options.MaxTerminationPercent,
+            company.ManagementUnitPrefix);
         return (hash, plan, null);
     }
 
@@ -214,7 +245,7 @@ public sealed class EmployeeImportService : IEmployeeImportService
         ? null
         : JsonSerializer.Serialize(plan.Issues.Select(i => new { row = i.RowNumber, employeeNumber = i.EmployeeNumber, severity = i.Severity.ToString(), message = i.Message }));
 
-    private EmployeeImportPreviewDto ToPreview(EmployeeImportBatch batch, EmployeeImportPlan plan)
+    private EmployeeImportPreviewDto ToPreview(EmployeeImportBatch batch, EmployeeImportPlan plan, CompanyInfo company)
     {
         static ImportChangeDto Dto(PlannedChange c) => new(c.EmployeeNumber, c.FullName, c.Changes);
         static ImportIssueDto Issue(HrImportIssue i) => new(i.RowNumber, i.EmployeeNumber, i.Severity.ToString(), i.Message);
@@ -233,7 +264,11 @@ public sealed class EmployeeImportService : IEmployeeImportService
             plan.ActiveBefore,
             plan.AbsenceTerminationPercent,
             _options.MaxTerminationPercent,
-            plan.RequiresMassTerminationConfirmation);
+            plan.RequiresMassTerminationConfirmation,
+            company.Code,
+            company.Name,
+            plan.OtherCompanyRows,
+            plan.LooksLikeOtherCompany);
     }
 
     private static TimeZoneInfo FindBrasilia()

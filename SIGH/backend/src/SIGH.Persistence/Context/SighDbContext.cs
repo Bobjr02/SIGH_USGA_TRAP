@@ -13,6 +13,7 @@ public class SighDbContext : DbContext, IApplicationDbContext
 {
     private readonly ICurrentUserService? _currentUserService;
     private readonly IRequestContext? _requestContext;
+    private readonly SIGH.Application.Common.Authorization.ActiveCompanyHolder? _activeCompany;
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
@@ -53,12 +54,17 @@ public class SighDbContext : DbContext, IApplicationDbContext
     public SighDbContext(
         DbContextOptions<SighDbContext> options,
         ICurrentUserService? currentUserService = null,
-        IRequestContext? requestContext = null)
+        IRequestContext? requestContext = null,
+        SIGH.Application.Common.Authorization.ActiveCompanyHolder? activeCompany = null)
         : base(options)
     {
         _currentUserService = currentUserService;
         _requestContext = requestContext;
+        _activeCompany = activeCompany;
     }
+
+    /// <summary>Empresa ativa validada da requisição (nula fora de requisição, no login e no modo "Todas").</summary>
+    public Guid? ActiveCompanyId => _activeCompany?.CompanyId;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -104,7 +110,8 @@ public class SighDbContext : DbContext, IApplicationDbContext
 
         var auditLogs = EntityAuditBuilder.Build(
             ChangeTracker, now, currentUserId,
-            _requestContext?.IpAddress, _requestContext?.UserAgent, _requestContext?.CorrelationId);
+            _requestContext?.IpAddress, _requestContext?.UserAgent, _requestContext?.CorrelationId,
+            ActiveCompanyId);
 
         if (auditLogs.Count > 0)
             AuditLogs.AddRange(auditLogs);

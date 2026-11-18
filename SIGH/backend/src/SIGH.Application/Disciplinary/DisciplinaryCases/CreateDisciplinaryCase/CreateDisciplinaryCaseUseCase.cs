@@ -15,13 +15,16 @@ public class CreateDisciplinaryCaseUseCase : ICreateDisciplinaryCaseUseCase
     private readonly IDisciplinaryCaseRepository _caseRepository;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IValidator<CreateDisciplinaryCaseRequest>? _validator;
+    private readonly SIGH.Application.Common.Authorization.ICompanyContext? _companies;
 
     public CreateDisciplinaryCaseUseCase(
         IApplicationDbContext context,
         IDisciplinaryCaseRepository caseRepository,
         IDateTimeProvider dateTimeProvider,
-        IValidator<CreateDisciplinaryCaseRequest>? validator = null)
+        IValidator<CreateDisciplinaryCaseRequest>? validator = null,
+        SIGH.Application.Common.Authorization.ICompanyContext? companies = null)
     {
+        _companies = companies;
         _context = context;
         _caseRepository = caseRepository;
         _dateTimeProvider = dateTimeProvider;
@@ -37,6 +40,19 @@ public class CreateDisciplinaryCaseUseCase : ICreateDisciplinaryCaseUseCase
             {
                 var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToList();
                 return Result<CreateDisciplinaryCaseResponse>.Failure(string.Join("; ", errors), "ValidationError");
+            }
+        }
+
+        // A empresa enviada pelo cliente só vale se for a ativa e o usuário puder criar nela; senão, "não existe".
+        if (_companies is not null)
+        {
+            try
+            {
+                await _companies.EnsureCanWriteAsync(request.CompanyId, SIGH.Application.Common.Authorization.PermissionCodes.DisciplinaryCases.Create, cancellationToken);
+            }
+            catch (KeyNotFoundException)
+            {
+                return Result<CreateDisciplinaryCaseResponse>.Failure("Empresa não encontrada.", "Company.NotFound");
             }
         }
 

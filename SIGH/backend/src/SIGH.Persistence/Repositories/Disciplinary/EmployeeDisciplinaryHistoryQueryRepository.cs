@@ -30,7 +30,7 @@ public class EmployeeDisciplinaryHistoryQueryRepository : IEmployeeDisciplinaryH
         if (employee == null) return null;
 
         // Fora do escopo por gerência: o funcionário "não existe" (404).
-        if (_scope is not null && !(await _scope.GetFilterAsync(cancellationToken)).Allows(employee.ManagementUnitId))
+        if (_scope is not null && !(await _scope.GetFilterAsync(cancellationToken)).Allows(employee.CompanyId, employee.ManagementUnitId))
             return null;
 
         var company = await _context.Companies
