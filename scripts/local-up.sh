@@ -78,12 +78,21 @@ cat <<INFO
                   (no primeiro acesso o sistema pede para trocar a senha)
 
  Usuários de demonstração (todos com a senha: $(value SIGH_DEMO_PASSWORD))
+   USGA
    auxiliar@demo.local            RH – Registro
    encarregado@demo.local         RH – Aprovador
-   juridico@demo.local            Jurídico
    gestor.industrial@demo.local   Gestor da USGA131
    gestor.agricola@demo.local     Gestor da USGA137 e USGA141
    preposto@demo.local            RH – Registro + RH – Aprovador
+   admin.usga@demo.local          Administrador da USGA
+   auxiliar.usga@demo.local       RH – Registro       encarregado.usga@demo.local   RH – Aprovador
+   gestor.usga131@demo.local      Gestor da USGA131
+   Trapiche
+   admin.trap@demo.local          Administrador da Trapiche
+   auxiliar.trap@demo.local       RH – Registro       encarregado.trap@demo.local   RH – Aprovador
+   gestor.trap131@demo.local      Gestor da TRAP131
+   As duas empresas (seletor "Empresa" no topo)
+   juridico@demo.local            Jurídico na USGA e na Trapiche
 
  E-mails (Mailpit): http://localhost:${mail_port}
  Parar:  scripts/local-down.sh     Zerar:  scripts/local-reset.sh

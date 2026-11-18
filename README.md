@@ -120,20 +120,26 @@ As próximas vezes reaproveitam o `.env.local` e sobem em menos de um minuto.
 ### 4. Entrar e conferir cada perfil
 Abra **http://localhost:8080** (Chrome ou Edge). A senha dos usuários abaixo é a que o script mostrou.
 
-| Usuário | Perfil | O que deve aparecer |
+| Usuário | Empresa e perfil | O que deve aparecer |
 |---|---|---|
-| `auxiliar@demo.local` | RH – Registro | "Minhas medidas", com a rejeitada destacada; botão **Registrar medida** |
-| `encarregado@demo.local` | RH – Aprovador | "Aguardando a sua aprovação" (2 medidas) e o contador em **Aprovações** no menu |
-| `juridico@demo.local` | Jurídico | O **Painel** (indicadores de todas as gerências); **Auditoria** no menu |
-| `gestor.industrial@demo.local` | Gestor da USGA131 | O **Painel**, as medidas e os funcionários só da Industrial (USGA131) |
-| `gestor.agricola@demo.local` | Gestor da USGA137 e USGA141 | O **Painel**, as medidas e os funcionários só das gerências agrícolas |
-| `preposto@demo.local` | RH – Registro + RH – Aprovador | A fila de aprovação e as próprias medidas (não aprova as que ele mesmo registrar) |
-| `admin@demo.local` | Administrador | Pede a troca de senha no primeiro acesso; o **Painel** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. Não registra nem aprova medidas |
+| `auxiliar@demo.local` | USGA · RH – Registro | "Minhas medidas", com a rejeitada destacada; botão **Registrar medida** |
+| `encarregado@demo.local` | USGA · RH – Aprovador | "Aguardando a sua aprovação" (2 medidas) e o contador em **Aprovações** no menu |
+| `juridico@demo.local` | **USGA e Trapiche** · Jurídico | O seletor **Empresa** no topo (USGA, Trapiche, Todas); em **Todas**, as medidas das duas empresas com a coluna Empresa e nenhuma ação de escrita; **Auditoria** no menu |
+| `gestor.industrial@demo.local` | USGA · Gestor da USGA131 | O **Painel**, as medidas e os funcionários só da Industrial (USGA131) |
+| `gestor.agricola@demo.local` | USGA · Gestor da USGA137 e USGA141 | O **Painel**, as medidas e os funcionários só das gerências agrícolas |
+| `preposto@demo.local` | USGA · RH – Registro + RH – Aprovador | A fila de aprovação e as próprias medidas (não aprova as que ele mesmo registrar) |
+| `admin.usga@demo.local`, `auxiliar.usga@demo.local`, `encarregado.usga@demo.local`, `gestor.usga131@demo.local` | USGA · Administrador, RH – Registro, RH – Aprovador, Gestor da USGA131 | Os mesmos papéis acima, com o nome da empresa na faixa do topo |
+| `admin.trap@demo.local` | Trapiche · Administrador | Só os usuários e os dados da Trapiche; em **Usuários → Novo usuário** com o e-mail de alguém da USGA, a opção **Vincular este usuário à Trapiche** |
+| `auxiliar.trap@demo.local`, `encarregado.trap@demo.local`, `gestor.trap131@demo.local` | Trapiche · RH – Registro, RH – Aprovador, Gestor da TRAP131 | As medidas e os funcionários fictícios da Trapiche (TRAP131/TRAP132) |
+| `admin@demo.local` | USGA · Administrador | Pede a troca de senha no primeiro acesso; o **Painel** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. Não registra nem aprova medidas |
 
-Os dados de demonstração têm 40 funcionários fictícios, o **histórico disciplinar fictício** importado da
+Os dados de demonstração da **USGA** têm 40 funcionários fictícios, o **histórico disciplinar fictício** importado da
 planilha de penalidades (14 registros, com o selo "Histórico importado") e 8 medidas do SIGH em todos os estados
 (aprovadas, uma suspensão, pendentes, uma rejeitada aguardando correção, uma cancelada e uma com carta em PDF
 anexada). No funcionário 50090007, a aba **Apoio à decisão** mostra o histórico separado das medidas do SIGH.
+A **Trapiche** tem 12 funcionários fictícios (gerências TRAP131 e TRAP132, nomes terminando em "TESTE"), 5 registros de
+histórico e 5 medidas (aprovadas, uma suspensão, pendente, rejeitada e cancelada), todos de planilhas **geradas por
+código** (`SIGH/backend/src/SIGH.Api/Demo/TrapicheDemoSpreadsheets.cs`), sem nenhum arquivo versionado.
 O tema escuro é o padrão; o botão de lua (no topo) troca para o claro. As capturas de todas as telas, nos dois
 temas, estão em [`SIGH/docs/telas`](SIGH/docs/telas).
 
@@ -279,11 +285,78 @@ O refresh é serializado entre abas (Web Locks + BroadcastChannel no front) e o 
 `Auth:RefreshTokenReuseGraceSeconds` (30 s), um refresh token recém-rotacionado apresentado de novo, sem disparar a
 detecção de reuso.
 
-#### Empresa única
-Esta é uma instalação de **empresa única**: todos os funcionários pertencem à empresa padrão do seed,
-"Usina Serra Grande S.A." (`Seed:DefaultCompanyName`; o nome antigo "Empresa Padrão" é renomeado no próximo start).
-As 9 gerências (Chave Organização do SAP) vêm de `Seed:ManagementUnits` no `appsettings.json`; o seed só cria as que
-faltam e nunca sobrescreve nomes, que continuam editáveis no banco.
+#### Multiempresa
+O SIGH atende **duas empresas do grupo**: **USGA** (Usina Serra Grande S.A., prefixo de gerência `USGA`) e
+**Trapiche** (prefixo `TRAP`). Cada empresa tem os próprios funcionários, gerências, medidas, histórico, motivos,
+lotes de importação, avisos, auditoria e administradores. O e-mail (todos @usga.com.br) **não** identifica a empresa.
+
+**Como cadastrar uma empresa** (não há tela para criar empresas nesta versão): `Seed:Companies:<código>` no
+`appsettings.json` ou em variáveis de ambiente.
+
+| Chave | Exemplo | Observação |
+| --- | --- | --- |
+| `Seed:Companies:<código>:Name` | `Trapiche` | nome de exibição; só vale na criação (depois é editável no banco) |
+| `Seed:Companies:<código>:ManagementUnitPrefix` | `TRAP` | prefixo das Chaves Organização da empresa (`TRAP131`) |
+| `Seed:Companies:<código>:AdminEmail` | `admin.trap@usga.com.br` | primeiro administrador da empresa |
+| `Seed:Companies:<código>:AdminPassword` | — | **só** por user-secrets ou variável de ambiente (`Seed__Companies__TRAP__AdminPassword`) |
+
+- O seed cria só o que falta: a USGA usa o Id da antiga empresa padrão (`00000000-…-0001`); a Trapiche, o Id
+  `00000000-…-0002`. Nenhum nome jurídico é inventado: a Trapiche nasce como "Trapiche", com o nome editável.
+- **Primeiro administrador**: criado com troca de senha obrigatória no primeiro acesso, como o da USGA
+  (`Seed:AdminEmail`/`Seed:AdminPassword` continuam valendo para a USGA). Se o e-mail já existe (a mesma pessoa
+  administra as duas), ela só recebe o perfil Administrador na empresa nova. Empresa que já tem administrador não muda.
+- **Gerências**: as da USGA vêm de `Seed:ManagementUnits` (sem mudança). A Trapiche começa **sem** gerências: a primeira
+  importação de funcionários cria as dela, com o código como nome (os códigos reais ainda serão levantados).
+- **Migration `MultiCompany`**: tudo o que existia (perfis, usuários, motivos, lotes, estado do histórico, auditoria)
+  vai para a USGA; a Trapiche é criada e recebe uma **cópia dos motivos ativos** da USGA. Índices únicos passam a ser
+  por empresa (matrícula, CPF, código de gerência, código de motivo, chave do histórico; perfil por usuário + perfil +
+  empresa). O teste `MultiCompanyMigrationTests` migra um banco "só USGA" com dados e confere que nada se perde.
+
+**Regras de acesso** (todas aplicadas no servidor):
+- **Perfis por empresa**: Administrador, RH – Registro, RH – Aprovador e Gestor valem só na empresa em que foram
+  atribuídos; o Jurídico é atribuído em cada empresa que a pessoa deve ver. A validade (`ValidFrom`/`ValidUntil`) é por
+  atribuição. As regras de sempre valem dentro de cada empresa: quem registra não aprova, o administrador não registra
+  nem aprova, ninguém altera os próprios perfis, **um administrador ativo por empresa**, o Gestor exige uma gerência
+  **daquela** empresa.
+- **Isolamento**: fora do alcance do usuário a resposta é **404** (nunca 403) e as listas não trazem o registro, em
+  todas as telas, exportações CSV, avisos, e-mails e auditoria. Toda permissão é avaliada na **empresa do recurso**
+  (a do funcionário, da medida, do lote...), cruzada com os perfis vigentes do usuário nela.
+- **Empresa ativa**: quem tem perfil em uma empresa só trabalha nela; quem tem em duas ou mais vê no topo o seletor
+  **Empresa: USGA | Trapiche | Todas** (a escolha fica no navegador; o padrão é a empresa do primeiro perfil vigente).
+  O front manda a escolha no cabeçalho `X-SIGH-Company` (código da empresa ou `TODAS`), e o servidor **sempre** valida:
+  empresa sem perfil vigente é 404 (`COMPANY_NOT_FOUND`).
+- **"Todas" é só leitura**: listas, detalhes, relatórios, painel, CSV e auditoria das empresas do usuário, com a
+  coluna **Empresa**. Qualquer escrita (registrar, aprovar, rejeitar, corrigir, cancelar, anexar, importar, administrar)
+  exige uma empresa específica e a permissão nela: no modo "Todas" a API responde 400 (`COMPANY_REQUIRED`).
+- **Administrador por empresa**: vê os usuários que têm (ou tiveram) perfil na empresa dele ou que foram criados nela;
+  atribui e retira só perfis da empresa dele. Ao criar um usuário com e-mail que já existe em outra empresa, a API
+  responde 409 (`USER_EXISTS_IN_ANOTHER_COMPANY`) e a tela oferece **"Vincular este usuário à <empresa>"**
+  (`POST /api/v1/users/link`): os perfis são dados nesta empresa, sem criar outra conta e sem mostrar os perfis da outra.
+  Desativar ou desbloquear a **conta** (todas as empresas) só é permitido se a pessoa não tiver perfil vigente em outra
+  empresa (mais exatamente: se o administrador tiver a permissão em todas as empresas em que ela tem perfil vigente);
+  senão ele retira os perfis da empresa dele e a pessoa perde o acesso só a ela.
+- **Importações** (funcionários e histórico): sempre para a empresa ativa ("Importando para: Trapiche"); o lote grava
+  a empresa. Linha com Chave Organização (ou GERÊNCIA, no histórico) de outra empresa é rejeitada com "gerência de outra
+  empresa — confira se o arquivo é desta empresa"; com mais da metade das linhas assim, a pré-visualização mostra o
+  alerta **"Este arquivo parece ser de outra empresa"** e a confirmação é recusada. No histórico, a GERÊNCIA é comparada
+  com os nomes das gerências da empresa (na Trapiche, as criadas pela importação de funcionários); nome desconhecido
+  gera aviso e usa a gerência atual do funcionário. O encerramento da importação de histórico é por empresa.
+- **Funcionários**: matrícula única por empresa e regra de CPF dentro de cada empresa — a mesma pessoa pode existir nas
+  duas, com cadastros e históricos separados.
+- **Avisos e e-mails** vão só para quem tem o perfil na empresa da medida, e o e-mail cita o nome da empresa (nunca o
+  nome nem o CPF do funcionário). **Auditoria**: cada registro grava a empresa; o administrador e o jurídico veem só as
+  empresas em que têm `Audit.View`; eventos sem empresa (login) só para quem tem escopo total em todas.
+
+**Desenho técnico**: as permissões **não** vão mais no token. A cada requisição o `CompanyContext` lê do banco os
+perfis vigentes do usuário por empresa (uma consulta, memorizada na requisição), valida o `X-SIGH-Company` e o
+`PermissionHandler` exige a permissão na empresa ativa (no modo "Todas", em alguma empresa, e as leituras ficam só nas
+empresas em que ela existe). O `AccessScope` vira "empresas com escopo total + gerências vigentes das demais", e os
+serviços de escrita conferem a empresa do recurso (`EnsureCanWriteAsync`). O `SecurityStamp` continua derrubando o
+token quando os perfis mudam em **qualquer** empresa. `GET /auth/me` devolve `companies` (código, nome, perfis,
+permissões e gerências de cada empresa). Toda rota tem `[CompanyRoute(Read|Write|Personal|NotApplicable)]`:
+`RouteCompanyCoverageTests` falha se uma rota nova não tiver classificação ou caso de isolamento em
+`CompanyIsolationTests` (leitura: usuário só da USGA não vê a Trapiche, com controle positivo; escrita: usuário com
+todas as permissões na USGA tenta agir sobre um recurso da Trapiche e recebe 404, sem alterar nada).
 
 #### Importação de funcionários (exportação do SAP)
 Fluxo em duas etapas (permissão `Employees.Import`):

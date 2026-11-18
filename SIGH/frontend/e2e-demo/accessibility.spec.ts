@@ -1,8 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { login, profile, settle } from './support/demo';
+import { login, profile, selectCompany, settle } from './support/demo';
 import { openDetail, DETAILS } from './support/pages';
-import { attachableRecord, EMPLOYEES_FILE, HISTORY_FILE } from './support/files';
+import { attachableRecord, EMPLOYEES_FILE, HISTORY_FILE, otherCompanyPreview } from './support/files';
 
 // axe-core (WCAG 2.0/2.1 A e AA) nas telas principais, nos temas escuro e claro.
 // Critério de aceite: NENHUMA violação de contraste (color-contrast). As demais violações também
@@ -42,6 +42,9 @@ const SCREENS: { name: string; who: string; path?: string; detail?: string; prep
     prepare: (page) => page.getByLabel('Planilha de penalidades').setInputFiles(HISTORY_FILE),
   },
   { name: 'anexos da medida', who: 'auxiliar', prepare: attachableRecord },
+  // Multiempresa.
+  { name: 'medidas no modo Todas', who: 'juridico', path: '/medidas', prepare: (page) => selectCompany(page, 'Todas') },
+  { name: 'importação de arquivo de outra empresa', who: 'admin.trap', path: '/employees/import', prepare: otherCompanyPreview },
 ];
 
 const audit = async (page: Page) => {

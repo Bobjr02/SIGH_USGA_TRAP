@@ -15,7 +15,12 @@ const demoPassword = () => process.env.SIGH_DEMO_PASSWORD!;
 /** Perfis de demonstração (DemoDataSeeder) + o administrador do seed. */
 export const PROFILES: DemoProfile[] = [
   { login: 'admin', email: ADMIN_EMAIL, password: () => process.env.E2E_NEW_PASSWORD!, label: 'Administrador' },
-  ...['auxiliar', 'encarregado', 'juridico', 'gestor.industrial', 'gestor.agricola', 'preposto'].map((login) => ({
+  ...[
+    'auxiliar', 'encarregado', 'juridico', 'gestor.industrial', 'gestor.agricola', 'preposto',
+    // Por empresa (multiempresa): USGA e Trapiche.
+    'admin.usga', 'auxiliar.usga', 'encarregado.usga', 'gestor.usga131',
+    'admin.trap', 'auxiliar.trap', 'encarregado.trap', 'gestor.trap131',
+  ].map((login) => ({
     login,
     email: `${login}@demo.local`,
     password: demoPassword,
@@ -32,6 +37,13 @@ export const login = async (page: Page, who: DemoProfile, theme: 'dark' | 'light
   await page.getByLabel('Senha', { exact: true }).fill(who.password());
   await page.getByRole('button', { name: 'Entrar' }).click();
   await expect(page.getByTestId('current-user-name').or(page.getByTestId('dashboard')).first()).toBeVisible({ timeout: 30_000 });
+};
+
+/** Troca a empresa ativa pelo seletor do topo (só aparece para quem tem duas ou mais empresas). */
+export const selectCompany = async (page: Page, name: string) => {
+  await page.getByRole('combobox', { name: 'Empresa' }).click();
+  await page.getByRole('option', { name, exact: true }).click();
+  await expect(page.getByTestId('company-banner')).toContainText(name === 'Todas' ? 'somente consulta' : name);
 };
 
 /** Espera a página assentar (sem esqueletos de carregamento). */

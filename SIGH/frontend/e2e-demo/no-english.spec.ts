@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { syntheticCpf } from '../e2e/support/xlsx';
-import { FORBIDDEN_TERMS, forbiddenIn, login, profile, PROFILES, settle } from './support/demo';
+import { FORBIDDEN_TERMS, forbiddenIn, login, profile, PROFILES, selectCompany, settle } from './support/demo';
+import { otherCompanyPreview } from './support/files';
 import { DETAILS, menuPaths, openDetail, screenText, visibleTextWithTabs } from './support/pages';
 
 // Nenhum termo em inglês no texto visível E nos atributos acessíveis (aria-label, title, alt,
@@ -59,6 +60,27 @@ for (const who of PROFILES) {
     expect(found, `termos em inglês para ${who.label}`).toEqual([]);
   });
 }
+
+test('juridico: the company switcher and every page in "Todas" mode have no English', async ({ page }) => {
+  const found: string[] = [];
+  await login(page, profile('juridico'));
+  await page.getByRole('combobox', { name: 'Empresa' }).click();
+  for (const term of forbiddenIn(await page.locator('body').innerText())) found.push(`seletor de empresa: "${term}"`);
+  await page.keyboard.press('Escape');
+  await selectCompany(page, 'Todas');
+  for (const path of await menuPaths(page)) {
+    await page.goto(path);
+    for (const term of forbiddenIn(await visibleTextWithTabs(page))) found.push(`${path} (Todas): "${term}"`);
+  }
+  expect(found).toEqual([]);
+});
+
+test('admin.trap: the "file of another company" alert has no English', async ({ page }) => {
+  await login(page, profile('admin.trap'));
+  await page.goto('/employees/import');
+  await otherCompanyPreview(page);
+  expect(forbiddenIn(await page.locator('body').innerText())).toEqual([]);
+});
 
 test('admin: new user dialog, the "user created" alert and the paginated list have no English', async ({ page }) => {
   const found: string[] = [];

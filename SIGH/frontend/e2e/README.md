@@ -11,6 +11,7 @@ Roda localmente e no CI (workflow `SIGH E2E`, `.github/workflows/e2e.yml`, em to
 | `password-reset.spec.ts` | "esqueci a senha": o e-mail chega ao Mailpit e o link redefine a senha (uso único) |
 | `employees.spec.ts` | importação SAP (carga + atualização), apoio à decisão com uma suspensão registrada e aprovada pelo fluxo de medidas, foto JPG anexada à medida. Roda antes dos specs abaixo, que usam os funcionários importados |
 | `records.spec.ts` | fluxo completo do RH: o admin cria auxiliar, encarregado e gestor da USGA131 (senha pelo link do e-mail); registro → rejeição → correção → aprovação; gestor da USGA131 vê, da USGA132 não (lista vazia, 404); admin sem botão de aprovar e API 403; quem tem os dois perfis não aprova a própria medida; gestor desativado vai para `/login` na requisição seguinte ao TTL (`Auth__SecurityStampCacheSeconds=2` no e2e) |
+| `multi-company.spec.ts` | multiempresa: o primeiro administrador da Trapiche (do seed, `Seed__Companies__TRAP__*`) importa funcionários fictícios TRAP131/TRAP132; o auxiliar da Trapiche registra uma medida; o encarregado da USGA não a vê (lista e 404) nem aprova; o encarregado da Trapiche aprova; o admin da Trapiche vincula o jurídico da USGA sem criar outra conta e não vê usuários nem funcionários da USGA; o jurídico, em "Todas", vê as duas empresas com a coluna Empresa e recebe 400 `COMPANY_REQUIRED` ao tentar escrever |
 
 ## Dois alvos
 

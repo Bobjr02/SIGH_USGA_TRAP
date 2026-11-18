@@ -17,6 +17,9 @@ if (!process.env.E2E_DB_NAME) {
 }
 process.env.E2E_ADMIN_PASSWORD ??= userSecret('Seed:AdminPassword');
 process.env.E2E_NEW_PASSWORD ??= `E2e#${randomBytes(6).toString('hex')}Aa1`;
+// Primeiro administrador da Trapiche (multi-company.spec). Na stack vem do scripts/e2e-stack.sh; no dev, gerado aqui.
+process.env.E2E_TRAP_ADMIN_EMAIL ??= 'admin.trap@e2e.local';
+process.env.E2E_TRAP_ADMIN_PASSWORD ??= `Trap#${randomBytes(6).toString('hex')}Aa1`;
 
 const apiConnectionString = STACK ? '' : withDatabase(baseConnectionString(), process.env.E2E_DB_NAME);
 
@@ -35,6 +38,8 @@ const devServers: PlaywrightTestConfig['webServer'] = [
       RateLimits__Login__PermitLimit: '100',
       // Perda de acesso: o cache do SecurityStamp (máx. 30 s) fica em 2 s para o e2e não esperar 30 s.
       Auth__SecurityStampCacheSeconds: '2',
+      Seed__Companies__TRAP__AdminEmail: process.env.E2E_TRAP_ADMIN_EMAIL,
+      Seed__Companies__TRAP__AdminPassword: process.env.E2E_TRAP_ADMIN_PASSWORD,
     },
     stdout: 'ignore',
     stderr: 'pipe',
@@ -73,7 +78,7 @@ export default defineConfig({
     // O resto usa o admin já com a senha nova e os funcionários importados.
     {
       name: 'app',
-      testMatch: /(two-tabs|evidence|password-reset|records)\.spec\.ts/,
+      testMatch: /(two-tabs|evidence|password-reset|records|multi-company)\.spec\.ts/,
       dependencies: ['employees'],
       use: { ...devices['Desktop Chrome'] },
     },

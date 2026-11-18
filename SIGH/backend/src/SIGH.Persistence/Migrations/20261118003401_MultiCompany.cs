@@ -106,7 +106,7 @@ namespace SIGH.Persistence.Migrations
             // USGA = o Id da antiga empresa padrão. Se houver dados sem a empresa cadastrada (não deveria), ela é criada.
             migrationBuilder.Sql($@"
 IF NOT EXISTS (SELECT 1 FROM [Companies] WHERE [Id] = '{UsgaId}')
-   AND (EXISTS (SELECT 1 FROM [UserRoles]) OR EXISTS (SELECT 1 FROM [InfractionTypes]) OR EXISTS (SELECT 1 FROM [Employees])
+   AND (EXISTS (SELECT 1 FROM [Users]) OR EXISTS (SELECT 1 FROM [UserRoles]) OR EXISTS (SELECT 1 FROM [InfractionTypes]) OR EXISTS (SELECT 1 FROM [Employees])
         OR EXISTS (SELECT 1 FROM [EmployeeImportBatches]) OR EXISTS (SELECT 1 FROM [DisciplinaryHistoryImportBatches]) OR EXISTS (SELECT 1 FROM [HistoryImportStates]))
     INSERT INTO [Companies] ([Id], [Name], [IsActive], [IsDeleted], [CreatedAt], [Code], [ManagementUnitPrefix])
     VALUES ('{UsgaId}', N'Usina Serra Grande S.A.', 1, 0, SYSDATETIMEOFFSET(), N'', N'');
@@ -121,7 +121,7 @@ IF NOT EXISTS (SELECT 1 FROM [Companies] WHERE [Id] = '{TrapicheId}' OR [Code] =
     VALUES ('{TrapicheId}', N'Trapiche', 1, 0, SYSDATETIMEOFFSET(), N'TRAP', N'TRAP');
 
 UPDATE [UserRoles] SET [CompanyId] = '{UsgaId}';
-UPDATE [Users] SET [CreatedInCompanyId] = '{UsgaId}';
+UPDATE [Users] SET [CreatedInCompanyId] = '{UsgaId}' WHERE EXISTS (SELECT 1 FROM [Companies] WHERE [Id] = '{UsgaId}');
 UPDATE [InfractionTypes] SET [CompanyId] = '{UsgaId}';
 UPDATE [HistoryImportStates] SET [CompanyId] = '{UsgaId}';
 UPDATE [EmployeeImportBatches] SET [CompanyId] = '{UsgaId}';
