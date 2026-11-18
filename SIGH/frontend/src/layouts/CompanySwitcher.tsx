@@ -30,7 +30,8 @@ export const CompanySwitcher: React.FC = () => {
       label="Empresa"
       value={activeCompany ?? ''}
       onChange={(e) => change(e.target.value)}
-      sx={{ minWidth: 168 }}
+      // Rótulo focado na cor do texto (o azul primário no fundo escuro não tem contraste AA).
+      sx={{ minWidth: 168, '& .MuiInputLabel-root.Mui-focused': { color: 'text.primary' } }}
       slotProps={{ htmlInput: { 'data-testid': 'company-switcher', 'aria-label': 'Empresa' } }}
     >
       {companies.map((c) => (
