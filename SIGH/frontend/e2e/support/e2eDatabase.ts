@@ -36,8 +36,24 @@ export const withDatabase = (connectionString: string, database: string) =>
 const part = (cs: string, key: string) => new RegExp(`(?:^|;)\\s*${key}\\s*=([^;]*)`, 'i').exec(cs)?.[1]?.trim();
 
 /**
+ * SQL do DROP de um banco de e2e: derruba as sessões abertas nele (KILL), fecha o resto com
+ * SINGLE_USER WITH ROLLBACK IMMEDIATE e apaga, tudo no mesmo lote. Exportado para teste.
+ */
+export const dropDatabaseSql = (database: string): string => {
+  if (!E2E_DB_PATTERN.test(database)) throw new Error(`Recusado: ${database} não é um banco de e2e.`);
+  return (
+    `IF DB_ID(N'${database}') IS NOT NULL BEGIN ` +
+    `DECLARE @kill nvarchar(max) = N''; ` +
+    `SELECT @kill += N'KILL ' + CAST(session_id AS nvarchar(10)) + N';' FROM sys.dm_exec_sessions WHERE database_id = DB_ID(N'${database}') AND session_id <> @@SPID; ` +
+    `EXEC (@kill); ` +
+    `ALTER DATABASE [${database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [${database}]; END`
+  );
+};
+
+/**
  * Apaga um banco SIGH_E2E_* (só esse padrão: nunca um banco de dev). Executa o sqlcmd dentro do
- * container do SQL Server do docker-compose; fecha conexões abertas antes do DROP.
+ * container do SQL Server do docker-compose; fecha as conexões abertas antes do DROP e repete até 3 vezes
+ * (uma conexão do pool da API pode voltar entre o SINGLE_USER e o DROP).
  */
 export const dropE2EDatabase = (database: string, connectionString = baseConnectionString()): boolean => {
   if (!E2E_DB_PATTERN.test(database)) throw new Error(`Recusado: ${database} não é um banco de e2e.`);
@@ -45,9 +61,7 @@ export const dropE2EDatabase = (database: string, connectionString = baseConnect
   const password = part(connectionString, 'Password');
   if (!password) throw new Error('A connection string não tem senha para o sqlcmd.');
   const container = process.env.E2E_SQL_CONTAINER ?? 'sigh-sqlserver';
-  const sql =
-    `IF DB_ID(N'${database}') IS NOT NULL BEGIN ` +
-    `ALTER DATABASE [${database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [${database}]; END`;
+  const sql = dropDatabaseSql(database);
   // Senha via variável de ambiente do processo (SQLCMDPASSWORD), não na linha de comando.
   // Até 3 tentativas: a API ainda de pé pode reabrir uma conexão no meio do SINGLE_USER e derrubar o DROP.
   for (let attempt = 1; ; attempt++) {
@@ -63,6 +77,7 @@ export const dropE2EDatabase = (database: string, connectionString = baseConnect
         const output = (error as { stdout?: Buffer }).stdout?.toString().trim();
         throw new Error(`DROP de ${database} falhou após ${attempt} tentativas${output ? `: ${output}` : ''}`);
       }
+      console.warn(`[e2e] DROP de ${database} falhou (tentativa ${attempt} de 3); tentando de novo em 2 s.`);
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
     }
   }

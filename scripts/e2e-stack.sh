@@ -90,6 +90,7 @@ start=$(date +%s)
 echo "Stack saudável em $(( $(date +%s) - start ))s."
 
 SQL_CONTAINER="$("${COMPOSE[@]}" ps -q sqlserver)"
+API_CONTAINER="$("${COMPOSE[@]}" ps -q api)"
 
 cd SIGH/frontend
 start=$(date +%s)
@@ -102,6 +103,7 @@ E2E_TRAP_ADMIN_EMAIL="$SIGH_TRAP_ADMIN_EMAIL" \
 E2E_TRAP_ADMIN_PASSWORD="$SIGH_TRAP_ADMIN_PASSWORD" \
 E2E_DB_NAME="$SIGH_E2E_DB_NAME" \
 E2E_SQL_CONTAINER="$SQL_CONTAINER" \
+E2E_API_CONTAINER="$API_CONTAINER" \
 E2E_BASE_CONNECTION_STRING="Server=localhost;User Id=sa;Password=$SIGH_SA_PASSWORD;TrustServerCertificate=True;" \
   npx playwright test "${PW_CONFIG[@]}" "$@"
 echo "Suíte e2e concluída em $(( $(date +%s) - start ))s."

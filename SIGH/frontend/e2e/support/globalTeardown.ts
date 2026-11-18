@@ -14,6 +14,16 @@ const ROOT = path.resolve(HERE, '../../../..');
 export default async function globalTeardown() {
   const database = process.env.E2E_DB_NAME;
   if (database && process.env.E2E_KEEP_DB !== '1') {
+    // Alvo "stack": a API (container) segura conexões no pool e reabre outras; parada, ninguém disputa o
+    // SINGLE_USER com o DROP. O container é removido logo depois pelo scripts/e2e-stack.sh.
+    const api = process.env.E2E_API_CONTAINER;
+    if (api && process.env.E2E_KEEP_STACK !== '1') {
+      try {
+        execFileSync('docker', ['stop', '--time', '5', api], { stdio: 'pipe' });
+      } catch (error) {
+        console.warn('[e2e] não foi possível parar a API antes do DROP:', (error as Error).message);
+      }
+    }
     try {
       dropE2EDatabase(database);
       console.log(`[e2e] banco ${database} apagado.`);
