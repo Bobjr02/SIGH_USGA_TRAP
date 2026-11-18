@@ -48,7 +48,6 @@ export const PERMISSIONS = {
   DISCIPLINARY_INFRACTION_TYPES_ACTIVATE: 'Disciplinary.InfractionTypes.Activate',
   DISCIPLINARY_INFRACTION_TYPES_DEACTIVATE: 'Disciplinary.InfractionTypes.Deactivate',
   DISCIPLINARY_REPORTS_VIEW_DASHBOARD: 'Disciplinary.Reports.ViewDashboard',
-  DISCIPLINARY_REPORTS_VIEW_CASES: 'Disciplinary.Reports.ViewCases',
   DISCIPLINARY_REPORTS_VIEW_MEASURES: 'Disciplinary.Reports.ViewMeasures',
   DISCIPLINARY_REPORTS_VIEW_EMPLOYEE_HISTORY: 'Disciplinary.Reports.ViewEmployeeHistory',
   DISCIPLINARY_REPORTS_EXPORT: 'Disciplinary.Reports.Export',

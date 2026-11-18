@@ -6,7 +6,7 @@ using SIGH.Application.Interfaces;
 
 public class MarkAllNotificationsAsReadCommand
 {
-    public Guid CompanyId { get; set; }
+    public IReadOnlyCollection<Guid> CompanyIds { get; set; } = Array.Empty<Guid>();
     public Guid UserId { get; set; }
 }
 
@@ -19,8 +19,8 @@ public class MarkAllNotificationsAsReadCommandValidator : AbstractValidator<Mark
 {
     public MarkAllNotificationsAsReadCommandValidator()
     {
-        RuleFor(x => x.CompanyId)
-            .NotEmpty().WithMessage("CompanyId é obrigatório.");
+        RuleFor(x => x.CompanyIds)
+            .NotEmpty().WithMessage("Ao menos uma empresa é obrigatória.");
 
         RuleFor(x => x.UserId)
             .NotEmpty().WithMessage("UserId é obrigatório.");
@@ -52,6 +52,6 @@ public class MarkAllNotificationsAsReadUseCase : IMarkAllNotificationsAsReadUseC
             return Result<int>.Failure("Dados inválidos para marcar todas notificações como lidas.", "VALIDATION_ERROR", errors);
         }
 
-        return await _notificationService.MarkAllAsReadAsync(command.CompanyId, command.UserId, cancellationToken);
+        return await _notificationService.MarkAllAsReadAsync(command.CompanyIds, command.UserId, cancellationToken);
     }
 }

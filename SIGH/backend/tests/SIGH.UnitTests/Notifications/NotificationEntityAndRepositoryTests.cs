@@ -73,22 +73,22 @@ public class NotificationEntityAndRepositoryTests
         await context.SaveChangesAsync();
 
         // Retrieve unread for specific user
-        var unread = await repository.GetUnreadUserNotificationsAsync(companyId, userId);
+        var unread = await repository.GetUnreadUserNotificationsAsync(new[] { companyId }, userId);
         unread.Should().HaveCount(2);
 
         // Mark notification 1 as read
-        var entity = await repository.GetByIdForUserAsync(notification1.Id, companyId, userId);
+        var entity = await repository.GetByIdForUserAsync(notification1.Id, new[] { companyId }, userId);
         entity.Should().NotBeNull();
         entity!.MarkAsRead(DateTimeOffset.UtcNow);
         await repository.UpdateAsync(entity);
         await context.SaveChangesAsync();
 
         // Retrieve unread again
-        var unreadAfterMark = await repository.GetUnreadUserNotificationsAsync(companyId, userId);
+        var unreadAfterMark = await repository.GetUnreadUserNotificationsAsync(new[] { companyId }, userId);
         unreadAfterMark.Should().HaveCount(1);
 
         // Get paged user notifications
-        var paged = await repository.GetPagedUserNotificationsAsync(companyId, userId, 1, 10);
+        var paged = await repository.GetPagedUserNotificationsAsync(new[] { companyId }, userId, 1, 10);
         paged.TotalCount.Should().Be(2);
         paged.Items.Should().HaveCount(2);
     }

@@ -93,6 +93,7 @@ cat <<INFO
    gestor.trap131@demo.local      Gestor da TRAP131
    As duas empresas (seletor "Empresa" no topo)
    juridico@demo.local            Jurídico na USGA e na Trapiche
+   admin.grupo@demo.local         Administrador na USGA e na Trapiche
 
  E-mails (Mailpit): http://localhost:${mail_port}
  Parar:  scripts/local-down.sh     Zerar:  scripts/local-reset.sh

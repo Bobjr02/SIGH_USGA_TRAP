@@ -27,7 +27,7 @@ import { formatDateTime } from '../../../utils/formatters';
 import { useAuth } from '../../../hooks/useAuth';
 import { PERMISSIONS } from '../../../auth/permissions';
 import { recordErrorMessage } from '../../records/api/recordsApi';
-import { adminApi, adminKeys, USER_EXISTS_IN_ANOTHER_COMPANY, USER_STATUS_LABELS, type RoleOption } from '../api/adminApi';
+import { adminApi, adminKeys, USER_EXISTS_IN_ANOTHER_COMPANY, USER_STATUS_LABELS, type RoleOption, type UserSummary } from '../api/adminApi';
 
 const MANAGER = 'Manager';
 
@@ -151,7 +151,7 @@ const CreateUserDialog: React.FC<{ open: boolean; onClose: () => void }> = ({ op
 
 /** Administração: lista de usuários (sem CPF: a coluna da referência virou e-mail), criação e acesso ao detalhe. */
 export const UsersPage: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isAllCompanies } = useAuth();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -242,6 +242,9 @@ export const UsersPage: React.FC = () => {
             ),
           },
           { key: 'email', header: 'E-mail', render: (u) => u.email, hideOnMobile: true },
+          ...(isAllCompanies
+            ? [{ key: 'company', header: 'Empresa', render: (u: UserSummary) => <span data-testid="user-company">{u.companies?.length ? u.companies.join(', ') : '—'}</span> }]
+            : []),
           { key: 'roles', header: 'Perfil', render: (u) => (u.roles.length ? u.roles.map((r) => label('Role', r)).join(', ') : '—') },
           { key: 'status', header: 'Situação', render: (u) => <UserStatusChip status={u.status} /> },
           { key: 'last', header: 'Último acesso', render: (u) => formatDateTime(u.lastLoginAt), className: 'whitespace-nowrap', hideOnMobile: true },

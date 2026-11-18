@@ -23,6 +23,7 @@ public class NotificationsController : BaseController
     private readonly IMarkAllNotificationsAsReadUseCase _markAllNotificationsAsReadUseCase;
     private readonly IProcessDeadlineMonitoringUseCase _processDeadlineMonitoringUseCase;
     private readonly IAuthorizedCompanyProvider _authorizedCompanyProvider;
+    private readonly ICompanyContext _companyContext;
 
     public NotificationsController(
         IGetUserNotificationsUseCase getUserNotificationsUseCase,
@@ -31,7 +32,8 @@ public class NotificationsController : BaseController
         IMarkNotificationAsReadUseCase markNotificationAsReadUseCase,
         IMarkAllNotificationsAsReadUseCase markAllNotificationsAsReadUseCase,
         IProcessDeadlineMonitoringUseCase processDeadlineMonitoringUseCase,
-        IAuthorizedCompanyProvider authorizedCompanyProvider)
+        IAuthorizedCompanyProvider authorizedCompanyProvider,
+        ICompanyContext companyContext)
     {
         _getUserNotificationsUseCase = getUserNotificationsUseCase;
         _getUnreadNotificationsUseCase = getUnreadNotificationsUseCase;
@@ -40,6 +42,7 @@ public class NotificationsController : BaseController
         _markAllNotificationsAsReadUseCase = markAllNotificationsAsReadUseCase;
         _processDeadlineMonitoringUseCase = processDeadlineMonitoringUseCase;
         _authorizedCompanyProvider = authorizedCompanyProvider;
+        _companyContext = companyContext;
     }
 
     /// <summary>
@@ -66,11 +69,11 @@ public class NotificationsController : BaseController
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId();
-        var resolvedCompanyId = await _authorizedCompanyProvider.GetAuthorizedCompanyIdAsync(companyId, cancellationToken);
+        var companyIds = await _authorizedCompanyProvider.ResolveCompanyIdsAsync(companyId, cancellationToken);
 
         var query = new GetNotificationsQuery
         {
-            CompanyId = resolvedCompanyId,
+            CompanyIds = companyIds,
             UserId = userId,
             PageNumber = pageNumber,
             PageSize = pageSize,
@@ -107,11 +110,11 @@ public class NotificationsController : BaseController
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId();
-        var resolvedCompanyId = await _authorizedCompanyProvider.GetAuthorizedCompanyIdAsync(companyId, cancellationToken);
+        var companyIds = await _authorizedCompanyProvider.ResolveCompanyIdsAsync(companyId, cancellationToken);
 
         var query = new GetUnreadNotificationsQuery
         {
-            CompanyId = resolvedCompanyId,
+            CompanyIds = companyIds,
             UserId = userId
         };
 
@@ -139,11 +142,11 @@ public class NotificationsController : BaseController
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId();
-        var resolvedCompanyId = await _authorizedCompanyProvider.GetAuthorizedCompanyIdAsync(companyId, cancellationToken);
+        var companyIds = await _authorizedCompanyProvider.ResolveCompanyIdsAsync(companyId, cancellationToken);
 
         var query = new GetUnreadCountQuery
         {
-            CompanyId = resolvedCompanyId,
+            CompanyIds = companyIds,
             UserId = userId
         };
 
@@ -173,12 +176,12 @@ public class NotificationsController : BaseController
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId();
-        var resolvedCompanyId = await _authorizedCompanyProvider.GetAuthorizedCompanyIdAsync(companyId, cancellationToken);
+        var companyIds = await _authorizedCompanyProvider.ResolveCompanyIdsAsync(companyId, cancellationToken);
 
         var command = new MarkNotificationAsReadCommand
         {
             NotificationId = id,
-            CompanyId = resolvedCompanyId,
+            CompanyIds = companyIds,
             UserId = userId
         };
 
@@ -210,11 +213,11 @@ public class NotificationsController : BaseController
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId();
-        var resolvedCompanyId = await _authorizedCompanyProvider.GetAuthorizedCompanyIdAsync(companyId, cancellationToken);
+        var companyIds = await _authorizedCompanyProvider.ResolveCompanyIdsAsync(companyId, cancellationToken);
 
         var command = new MarkAllNotificationsAsReadCommand
         {
-            CompanyId = resolvedCompanyId,
+            CompanyIds = companyIds,
             UserId = userId
         };
 
@@ -241,8 +244,11 @@ public class NotificationsController : BaseController
         [FromQuery] Guid? companyId = null,
         CancellationToken cancellationToken = default)
     {
-        var resolvedCompanyId = await _authorizedCompanyProvider.GetAuthorizedCompanyIdAsync(companyId, cancellationToken);
-        var result = await _processDeadlineMonitoringUseCase.ExecuteAsync(resolvedCompanyId, cancellationToken);
+        // Escrita: só na empresa ativa (o modo "Todas" já foi recusado com COMPANY_REQUIRED). Outra empresa pedida é 404.
+        var activeCompanyId = await _companyContext.RequireWriteCompanyAsync(cancellationToken);
+        if (companyId is { } requested && requested != Guid.Empty && requested != activeCompanyId)
+            throw new CompanyNotAccessibleException();
+        var result = await _processDeadlineMonitoringUseCase.ExecuteAsync(activeCompanyId, cancellationToken);
 
         if (!result.Success)
         {

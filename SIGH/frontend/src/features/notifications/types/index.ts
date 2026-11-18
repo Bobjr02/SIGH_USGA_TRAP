@@ -4,6 +4,9 @@ export type NotificationType = 'Info' | 'Reminder' | 'Escalation' | 'Warning' | 
 export interface NotificationDto {
   id: string;
   companyId: string;
+  /** Empresa do aviso (mostrada no modo "Todas"). */
+  companyName?: string;
+  companyCode?: string;
   recipientUserId: string;
   recipientEmail?: string;
   title: string;

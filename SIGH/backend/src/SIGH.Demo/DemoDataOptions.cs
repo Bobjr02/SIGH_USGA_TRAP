@@ -1,4 +1,4 @@
-namespace SIGH.Api.Demo;
+namespace SIGH.Demo;
 
 /// <summary>
 /// Dados de demonstração (seção "Seed"): Seed:DemoData=true cria, pelos serviços reais, funcionários,

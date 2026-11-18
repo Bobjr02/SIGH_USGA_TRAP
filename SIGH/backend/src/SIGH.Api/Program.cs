@@ -52,12 +52,13 @@ try
     });
 
     // Dados de demonstração: Seed:DemoData só em Development/Demo; em outro ambiente a API não sobe.
-    builder.Services.AddOptions<SIGH.Api.Demo.DemoDataOptions>()
-        .Bind(builder.Configuration.GetSection(SIGH.Api.Demo.DemoDataOptions.SectionName))
-        .Validate(o => SIGH.Api.Demo.DemoDataGuard.IsAllowed(o, builder.Environment.EnvironmentName), SIGH.Api.Demo.DemoDataGuard.RefusedMessage)
+    builder.Services.AddOptions<SIGH.Demo.DemoDataOptions>()
+        .Bind(builder.Configuration.GetSection(SIGH.Demo.DemoDataOptions.SectionName))
+        .Validate(o => SIGH.Demo.DemoDataGuard.IsAllowed(o, builder.Environment.EnvironmentName), SIGH.Demo.DemoDataGuard.RefusedMessage)
         .Validate(o => !o.DemoData || !string.IsNullOrWhiteSpace(o.DemoPassword), "Seed:DemoData=true exige Seed:DemoPassword (senha dos usuários de demonstração).")
         .ValidateOnStart();
-    builder.Services.AddScoped<SIGH.Api.Demo.DemoDataSeeder>();
+    // O seeder (projeto SIGH.Demo, com o OpenXml) só é registrado com Seed:DemoData=true.
+    SIGH.Demo.DemoDataServiceCollectionExtensions.AddDemoData(builder.Services, builder.Configuration.GetValue<bool>("Seed:DemoData"));
 
     // Atrás de um proxy reverso (nginx do container web): IP real e esquema vêm dos cabeçalhos X-Forwarded-*.
     // ReverseProxy:KnownProxies (IPs separados por vírgula) restringe quem pode enviá-los; sem lista, confia
@@ -207,8 +208,8 @@ try
             await seeder.SeedAsync();
             Log.Information("Migrations e seed aplicados com sucesso.");
 
-            if (scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SIGH.Api.Demo.DemoDataOptions>>().Value.DemoData)
-                await scope.ServiceProvider.GetRequiredService<SIGH.Api.Demo.DemoDataSeeder>().SeedAsync();
+            if (scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SIGH.Demo.DemoDataOptions>>().Value.DemoData)
+                await scope.ServiceProvider.GetRequiredService<SIGH.Demo.DemoDataSeeder>().SeedAsync();
         }
     }
 

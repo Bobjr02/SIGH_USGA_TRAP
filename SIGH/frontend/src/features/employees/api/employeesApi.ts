@@ -193,6 +193,8 @@ export interface ImportBatch {
   appliedByName?: string | null;
   summary: ImportSummary;
   massTerminationConfirmed: boolean;
+  /** Empresa do lote (coluna Empresa no modo "Todas"). */
+  companyName?: string | null;
 }
 
 const unwrap = <T,>(result: Result<T>, fallback: string): T => {

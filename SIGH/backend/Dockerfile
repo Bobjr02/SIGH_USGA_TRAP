@@ -13,6 +13,7 @@ COPY SIGH/backend/src/SIGH.Domain/SIGH.Domain.csproj ./SIGH/backend/src/SIGH.Dom
 COPY SIGH/backend/src/SIGH.Application/SIGH.Application.csproj ./SIGH/backend/src/SIGH.Application/
 COPY SIGH/backend/src/SIGH.Persistence/SIGH.Persistence.csproj ./SIGH/backend/src/SIGH.Persistence/
 COPY SIGH/backend/src/SIGH.Infrastructure/SIGH.Infrastructure.csproj ./SIGH/backend/src/SIGH.Infrastructure/
+COPY SIGH/backend/src/SIGH.Demo/SIGH.Demo.csproj ./SIGH/backend/src/SIGH.Demo/
 COPY SIGH/backend/src/SIGH.Api/SIGH.Api.csproj ./SIGH/backend/src/SIGH.Api/
 RUN dotnet restore ./SIGH/backend/src/SIGH.Api/SIGH.Api.csproj
 

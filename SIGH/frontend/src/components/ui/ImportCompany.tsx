@@ -17,7 +17,7 @@ export const ImportTargetCompany: React.FC = () => {
   if (blocked)
     return (
       <Alert severity="warning" data-testid="import-company-required">
-        O modo &quot;Todas&quot; é só para consulta. Escolha no topo a empresa para a qual o arquivo vai ser importado.
+        <strong>Selecione uma empresa</strong> no topo da tela. O modo &quot;Todas&quot; é só para consulta: a importação e a situação da importação são de uma empresa específica.
       </Alert>
     );
   return (

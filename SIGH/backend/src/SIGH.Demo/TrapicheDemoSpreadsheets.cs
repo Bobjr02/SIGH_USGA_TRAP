@@ -3,7 +3,7 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 
-namespace SIGH.Api.Demo;
+namespace SIGH.Demo;
 
 /// <summary>
 /// Planilhas FICTÍCIAS da Trapiche, geradas por código (nada é versionado): a exportação do SAP e a planilha de

@@ -26,7 +26,7 @@ const GuardedRoutes = () => (
       <Route
         path="/reports"
         element={
-          <RequirePermission anyOf={[PERMISSIONS.DISCIPLINARY_REPORTS_VIEW_CASES, PERMISSIONS.DISCIPLINARY_REPORTS_VIEW_MEASURES]}>
+          <RequirePermission anyOf={[PERMISSIONS.DISCIPLINARY_REPORTS_VIEW_DASHBOARD, PERMISSIONS.DISCIPLINARY_REPORTS_VIEW_MEASURES]}>
             <h1>Relatórios</h1>
           </RequirePermission>
         }

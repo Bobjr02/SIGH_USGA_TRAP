@@ -4,6 +4,7 @@ import { CheckCircle2, AlertTriangle, Info, Bell, Clock } from 'lucide-react';
 import { NotificationDto } from '../types';
 import { formatDate, formatDateTime } from '../../../utils/formatters';
 import { label } from '../../../i18n/labels';
+import { useIsAllCompanies } from '../../../contexts/AuthContext';
 
 interface NotificationItemProps {
   notification: NotificationDto;
@@ -16,6 +17,8 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
   onMarkAsRead,
   isMarkingAsRead = false,
 }) => {
+  // Modo "Todas": os avisos das empresas do usuário vêm juntos; cada um diz de qual empresa é.
+  const isAllCompanies = useIsAllCompanies();
   const getIcon = () => {
     switch (notification.type.toLowerCase()) {
       case 'escalation':
@@ -67,6 +70,9 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
               <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: notification.isRead ? 600 : 700 }}>
                 {notification.title}
               </Typography>
+              {isAllCompanies && notification.companyName && (
+                <Chip label={notification.companyName} size="small" variant="outlined" data-testid="notification-company" sx={{ height: 20, fontSize: '0.7rem' }} />
+              )}
               {!notification.isRead && (
                 <Chip label="Nova" size="small" color="primary" sx={{ height: 20, fontSize: '0.65rem' }} />
               )}

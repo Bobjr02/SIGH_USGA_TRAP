@@ -24,9 +24,11 @@ import {
 import { NotificationDto } from '../types';
 import { label } from '../../../i18n/labels';
 import { formatDateTime } from '../../../utils/formatters';
+import { useIsAllCompanies } from '../../../contexts/AuthContext';
 
 export const NotificationBadge: React.FC = () => {
   const navigate = useNavigate();
+  const isAllCompanies = useIsAllCompanies();
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
 
   const { data: unreadCount = 0 } = useUnreadNotificationsCount(30000);
@@ -158,6 +160,9 @@ export const NotificationBadge: React.FC = () => {
                         color={getTypeColor(item.type) as any}
                         sx={{ height: 20, fontSize: '0.65rem' }}
                       />
+                      {isAllCompanies && item.companyName && (
+                        <Chip label={item.companyName} size="small" variant="outlined" data-testid="notification-company" sx={{ height: 20, fontSize: '0.65rem' }} />
+                      )}
                       <Typography variant="caption" color="text.secondary">
                         {formatDateTime(item.createdAt)}
                       </Typography>

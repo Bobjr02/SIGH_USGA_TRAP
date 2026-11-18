@@ -90,8 +90,13 @@ public sealed class CompanyRequiredException : BusinessRuleValidationException
 {
     public const string ErrorCode = "COMPANY_REQUIRED";
 
+    /// <summary>Leitura que só faz sentido em uma empresa (ou requisição sem empresa escolhida).</summary>
+    public const string SelectCompanyMessage = "Selecione uma empresa no topo da tela.";
+
     public CompanyRequiredException()
         : base("O modo \"Todas\" é só para consulta. Escolha uma empresa no topo da tela para registrar, aprovar ou administrar.") { }
+
+    public CompanyRequiredException(string message) : base(message) { }
 }
 
 public sealed class CompanyContext : ICompanyContext
@@ -192,8 +197,14 @@ public sealed class CompanyContext : ICompanyContext
 
         if (string.IsNullOrEmpty(requested))
         {
-            // Sem cabeçalho: a empresa do primeiro perfil vigente (o mesmo padrão da tela).
-            return _selection = Remember(grants.Count == 0 ? CompanySelection.None : new CompanySelection(false, grants[0].CompanyId));
+            // Sem cabeçalho: só é inequívoco com UMA empresa. Com duas ou mais, nunca escolhe por conta própria: 400
+            // COMPANY_REQUIRED (a tela sempre manda o cabeçalho; clientes da API precisam mandar).
+            return _selection = grants.Count switch
+            {
+                0 => Remember(CompanySelection.None),
+                1 => Remember(new CompanySelection(false, grants.Single().CompanyId)),
+                _ => throw new CompanyRequiredException(CompanyRequiredException.SelectCompanyMessage),
+            };
         }
 
         if (string.Equals(requested, ICompanyContext.AllCompanies, StringComparison.OrdinalIgnoreCase)

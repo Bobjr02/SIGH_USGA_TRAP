@@ -41,6 +41,8 @@ export interface UserSummary {
   roles: string[];
   createdAt: string;
   lastLoginAt?: string | null;
+  /** Empresas da pessoa entre as do administrador (coluna Empresa no modo "Todas"). */
+  companies?: string[] | null;
 }
 
 export interface UserDetail extends UserSummary {

@@ -54,9 +54,6 @@ public static class DependencyInjection
         services.AddScoped<IJobTitleRepository, JobTitleRepository>();
         services.AddScoped<IDisciplinaryCaseRepository, DisciplinaryCaseRepository>();
         services.AddScoped<IInfractionTypeRepository, InfractionTypeRepository>();
-        services.AddScoped<IEmployeeDisciplinaryHistoryQueryRepository, EmployeeDisciplinaryHistoryQueryRepository>();
-        services.AddScoped<IDisciplinaryDashboardQueryRepository, DisciplinaryDashboardQueryRepository>();
-        services.AddScoped<IDisciplinaryReportQueryRepository, DisciplinaryReportQueryRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IDeadlineMonitoringQueryRepository, DeadlineMonitoringQueryRepository>();
         services.AddScoped<SIGH.Application.Employees.Common.IEmployeeQueryService, SIGH.Persistence.Repositories.EmployeeQueryService>();

@@ -19,7 +19,9 @@ public record UserSummaryDto(
     List<string> Roles,
     DateTimeOffset CreatedAt,
     /// <summary>Último acesso (coluna da tabela de usuários).</summary>
-    DateTimeOffset? LastLoginAt = null
+    DateTimeOffset? LastLoginAt = null,
+    /// <summary>Empresas da requisição em que a pessoa tem perfil ou em que a conta foi criada (coluna Empresa no modo "Todas").</summary>
+    List<string>? Companies = null
 );
 
 public record PagedList<T>(

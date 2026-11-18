@@ -12,40 +12,36 @@ public class NotificationRepository : INotificationRepository
 {
     private readonly SighDbContext _context;
     private readonly SIGH.Application.Common.Authorization.IAccessScope? _scope;
-    private readonly SIGH.Application.Common.Authorization.ICompanyContext? _companies;
 
     public NotificationRepository(
         SighDbContext context,
-        SIGH.Application.Common.Authorization.IAccessScope? scope = null,
-        SIGH.Application.Common.Authorization.ICompanyContext? companies = null)
+        SIGH.Application.Common.Authorization.IAccessScope? scope = null)
     {
         _context = context;
         _scope = scope;
-        _companies = companies;
     }
 
     /// <summary>
-    /// Empresas cujas notificações a requisição enxerga: a informada (se estiver entre as da requisição) ou, no modo
-    /// "Todas", todas as empresas da requisição. Sem contexto (testes de unidade, workers): só a informada.
+    /// Empresas pedidas que a requisição enxerga (as pedidas vêm do controller: a empresa ativa, ou todas as empresas
+    /// da requisição no modo "Todas"). Nunca alarga: empresa fora do escopo da requisição é descartada. Sem contexto
+    /// (testes de unidade, workers): as pedidas.
     /// </summary>
-    private async Task<IReadOnlyCollection<Guid>> CompaniesAsync(Guid companyId, CancellationToken cancellationToken)
+    private async Task<List<Guid>> CompaniesAsync(IReadOnlyCollection<Guid> companyIds, CancellationToken cancellationToken)
     {
-        if (_scope is null || _companies is null)
-            return new[] { companyId };
+        if (_scope is null)
+            return companyIds.Distinct().ToList();
 
         var allowed = await _scope.GetCompanyIdsAsync(cancellationToken);
-        if ((await _companies.GetSelectionAsync(cancellationToken)).IsAll)
-            return allowed;
-        return allowed.Contains(companyId) ? new[] { companyId } : Array.Empty<Guid>();
+        return companyIds.Where(allowed.Contains).Distinct().ToList();
     }
 
     /// <summary>
     /// Notificações do usuário, sem as que se referem a uma medida/processo fora do escopo atual dele
     /// (por exemplo, depois de perder a gerência). Notificações sem processo vinculado sempre aparecem.
     /// </summary>
-    private async Task<IQueryable<Notification>> UserNotificationsAsync(Guid companyId, Guid userId, CancellationToken cancellationToken)
+    private async Task<IQueryable<Notification>> UserNotificationsAsync(IReadOnlyCollection<Guid> companyIds, Guid userId, CancellationToken cancellationToken)
     {
-        var companies = (await CompaniesAsync(companyId, cancellationToken)).ToList();
+        var companies = await CompaniesAsync(companyIds, cancellationToken);
         var query = _context.Notifications.AsNoTracking().Where(n => companies.Contains(n.CompanyId) && n.UserId == userId);
         if (_scope is null)
             return query;
@@ -67,15 +63,15 @@ public class NotificationRepository : INotificationRepository
             .FirstOrDefaultAsync(n => n.Id == id && n.CompanyId == companyId, cancellationToken);
     }
 
-    public async Task<Notification?> GetByIdForUserAsync(Guid id, Guid companyId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<Notification?> GetByIdForUserAsync(Guid id, IReadOnlyCollection<Guid> companyIds, Guid userId, CancellationToken cancellationToken = default)
     {
-        var companies = (await CompaniesAsync(companyId, cancellationToken)).ToList();
+        var companies = await CompaniesAsync(companyIds, cancellationToken);
         return await _context.Notifications
             .FirstOrDefaultAsync(n => n.Id == id && companies.Contains(n.CompanyId) && n.UserId == userId, cancellationToken);
     }
 
     public async Task<PagedResult<NotificationDto>> GetPagedUserNotificationsAsync(
-        Guid companyId,
+        IReadOnlyCollection<Guid> companyIds,
         Guid userId,
         int pageNumber,
         int pageSize,
@@ -83,7 +79,7 @@ public class NotificationRepository : INotificationRepository
     {
         var q = new GetNotificationsQuery
         {
-            CompanyId = companyId,
+            CompanyIds = companyIds,
             UserId = userId,
             PageNumber = pageNumber,
             PageSize = pageSize
@@ -95,7 +91,7 @@ public class NotificationRepository : INotificationRepository
         GetNotificationsQuery queryParams,
         CancellationToken cancellationToken = default)
     {
-        var query = await UserNotificationsAsync(queryParams.CompanyId, queryParams.UserId, cancellationToken);
+        var query = await UserNotificationsAsync(queryParams.CompanyIds, queryParams.UserId, cancellationToken);
 
         if (queryParams.IsRead.HasValue)
         {
@@ -148,6 +144,8 @@ public class NotificationRepository : INotificationRepository
             {
                 Id = n.Id,
                 CompanyId = n.CompanyId,
+                CompanyName = _context.Companies.Where(c => c.Id == n.CompanyId).Select(c => c.Name).FirstOrDefault() ?? string.Empty,
+                CompanyCode = _context.Companies.Where(c => c.Id == n.CompanyId).Select(c => c.Code).FirstOrDefault() ?? string.Empty,
                 RecipientUserId = n.UserId,
                 RecipientEmail = string.Empty,
                 Title = n.Title,
@@ -167,17 +165,19 @@ public class NotificationRepository : INotificationRepository
     }
 
     public async Task<IEnumerable<NotificationDto>> GetUnreadUserNotificationsAsync(
-        Guid companyId,
+        IReadOnlyCollection<Guid> companyIds,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        return await (await UserNotificationsAsync(companyId, userId, cancellationToken))
+        return await (await UserNotificationsAsync(companyIds, userId, cancellationToken))
             .Where(n => !n.IsRead)
             .OrderByDescending(n => n.CreatedAt)
             .Select(n => new NotificationDto
             {
                 Id = n.Id,
                 CompanyId = n.CompanyId,
+                CompanyName = _context.Companies.Where(c => c.Id == n.CompanyId).Select(c => c.Name).FirstOrDefault() ?? string.Empty,
+                CompanyCode = _context.Companies.Where(c => c.Id == n.CompanyId).Select(c => c.Code).FirstOrDefault() ?? string.Empty,
                 RecipientUserId = n.UserId,
                 RecipientEmail = string.Empty,
                 Title = n.Title,
@@ -195,21 +195,21 @@ public class NotificationRepository : INotificationRepository
     }
 
     public async Task<int> GetUnreadCountAsync(
-        Guid companyId,
+        IReadOnlyCollection<Guid> companyIds,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        return await (await UserNotificationsAsync(companyId, userId, cancellationToken))
+        return await (await UserNotificationsAsync(companyIds, userId, cancellationToken))
             .CountAsync(n => !n.IsRead, cancellationToken);
     }
 
     public async Task<int> MarkAllAsReadAsync(
-        Guid companyId,
+        IReadOnlyCollection<Guid> companyIds,
         Guid userId,
         DateTimeOffset readAt,
         CancellationToken cancellationToken = default)
     {
-        var companies = (await CompaniesAsync(companyId, cancellationToken)).ToList();
+        var companies = await CompaniesAsync(companyIds, cancellationToken);
         var unreadNotifications = await _context.Notifications
             .Where(n => companies.Contains(n.CompanyId) && n.UserId == userId && !n.IsRead)
             .ToListAsync(cancellationToken);

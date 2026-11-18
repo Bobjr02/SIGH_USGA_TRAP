@@ -125,16 +125,15 @@ public sealed class HistoryImportService : IHistoryImportService
     // ---- estado ----
 
     /// <summary>
-    /// Empresa das leituras da importação (estado): a empresa ativa; no modo "Todas", a primeira empresa da
-    /// requisição (a tela pede uma empresa específica para importar).
+    /// Empresa das leituras da importação (estado): sempre a empresa ativa. O estado é de UMA empresa; no modo
+    /// "Todas" não há resposta certa, então é 400 COMPANY_REQUIRED ("Selecione uma empresa").
     /// </summary>
     private async Task<Guid> ReadCompanyAsync(CancellationToken cancellationToken)
     {
         var selection = await _company.GetSelectionAsync(cancellationToken);
-        if (selection.CompanyId is { } active)
-            return active;
-        var grants = await _company.GetRequestGrantsAsync(cancellationToken);
-        return grants.Count > 0 ? grants[0].CompanyId : Guid.Empty;
+        return selection is { IsAll: false, CompanyId: { } active }
+            ? active
+            : throw new CompanyRequiredException(CompanyRequiredException.SelectCompanyMessage);
     }
 
     public async Task<HistoryImportStatusDto> GetStatusAsync(CancellationToken cancellationToken = default)

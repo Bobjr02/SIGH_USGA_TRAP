@@ -1,4 +1,14 @@
-#!/usr/bin/env bash
+      # Fecha as conexões (SINGLE_USER WITH ROLLBACK IMMEDIATE) e apaga; até 3 tentativas, porque uma API
+      # ainda de pé pode reabrir uma conexão entre o SINGLE_USER e o DROP.
+      dropped=0
+      for attempt in 1 2 3; do
+        # shellcheck disable=SC2016
+        if docker exec -e DB="$db" "$c" bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "IF DB_ID(N'"'"'$DB'"'"') IS NOT NULL BEGIN ALTER DATABASE [$DB] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DB]; END"' >/dev/null 2>&1; then
+          dropped=1; break
+        fi
+        [ "$attempt" -lt 3 ] && sleep 2
+      done
+      [ "$dropped" = 1 ] || say "  aviso: não consegui apagar $db após 3 tentativas."#!/usr/bin/env bash
 # Libera espaço em disco no Codespace/máquina de dev. Seguro e idempotente: pode rodar quantas vezes quiser.
 #   scripts/limpar-espaco.sh               # limpeza leve (+ pesada só se o disco estiver cheio); mostra antes/depois
 #   scripts/limpar-espaco.sh --completo    # tudo, leve e pesada, independentemente do espaço livre
@@ -59,9 +69,18 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
       | tr -d '\r' | grep -E '^SIGH_E2E_[0-9]{8,17}$' || true)
     for db in $dbs; do
       say "Apagando o banco $db (container $name)..."
-      # shellcheck disable=SC2016
-      docker exec -e DB="$db" "$c" bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "ALTER DATABASE [$DB] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DB];"' >/dev/null 2>&1 \
-        || say "  aviso: não consegui apagar $db."
+      # Fecha as conexões (SINGLE_USER WITH ROLLBACK IMMEDIATE) e apaga; até 3 tentativas, porque uma API
+      # ainda de pé pode reabrir uma conexão entre o SINGLE_USER e o DROP.
+      dropped=0
+      for attempt in 1 2 3; do
+        # shellcheck disable=SC2016
+        if docker exec -e DB="$db" "$c" bash -c '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "IF DB_ID(N'"'"'$DB'"'"') IS NOT NULL BEGIN ALTER DATABASE [$DB] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$DB]; END"' >/dev/null 2>&1; then
+          dropped=1
+          break
+        fi
+        [ "$attempt" -lt 3 ] && sleep 2
+      done
+      [ "$dropped" = 1 ] || say "  aviso: não consegui apagar $db após 3 tentativas."
     done
   done
 

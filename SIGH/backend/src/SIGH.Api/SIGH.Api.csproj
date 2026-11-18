@@ -11,12 +11,12 @@
     <ProjectReference Include="..\SIGH.Application\SIGH.Application.csproj" />
     <ProjectReference Include="..\SIGH.Infrastructure\SIGH.Infrastructure.csproj" />
     <ProjectReference Include="..\SIGH.Persistence\SIGH.Persistence.csproj" />
+    <!-- Dados de demonstração (Seed:DemoData): projeto à parte, registrado só com Seed:DemoData=true. -->
+    <ProjectReference Include="..\SIGH.Demo\SIGH.Demo.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
-    <!-- MIT: gera as planilhas FICTÍCIAS da demonstração da Trapiche (nenhum dado real é versionado). -->
-    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />

@@ -223,6 +223,18 @@ public sealed class DatabaseSeeder
             result.Add(permission);
         }
 
+        // Permissão que saiu do código (ex.: Disciplinary.Reports.ViewCases, dos relatórios antigos removidos): exclusão
+        // lógica. Os perfis do sistema já a perdem em SyncRolePermissionsAsync.
+        var codes = PermissionCodes.All.Select(p => p.Code).ToHashSet(StringComparer.Ordinal);
+        var obsolete = existing.Values.Where(p => !p.IsDeleted && !codes.Contains(p.Code)).ToList();
+        foreach (var permission in obsolete)
+        {
+            permission.IsDeleted = true;
+            permission.DeletedAt = DateTimeOffset.UtcNow;
+        }
+        if (obsolete.Count > 0)
+            _logger.LogInformation("Seed: {Count} permissões que saíram do código foram desativadas.", obsolete.Count);
+
         if (inserted > 0)
             _logger.LogInformation("Seed: {Count} permissões inseridas.", inserted);
 

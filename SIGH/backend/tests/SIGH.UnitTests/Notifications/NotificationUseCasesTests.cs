@@ -43,7 +43,7 @@ public class NotificationUseCasesTests
         var userId = Guid.NewGuid();
         var query = new GetNotificationsQuery
         {
-            CompanyId = companyId,
+            CompanyIds = new[] { companyId },
             UserId = userId,
             PageNumber = 1,
             PageSize = 10
@@ -66,7 +66,7 @@ public class NotificationUseCasesTests
     {
         var query = new GetNotificationsQuery
         {
-            CompanyId = Guid.NewGuid(),
+            CompanyIds = new[] { Guid.NewGuid() },
             UserId = Guid.NewGuid(),
             PageNumber = 0,
             PageSize = 10
@@ -86,7 +86,7 @@ public class NotificationUseCasesTests
         var userId = Guid.NewGuid();
         var query = new GetUnreadNotificationsQuery
         {
-            CompanyId = companyId,
+            CompanyIds = new[] { companyId },
             UserId = userId
         };
 
@@ -96,7 +96,7 @@ public class NotificationUseCasesTests
         };
 
         _notificationServiceMock
-            .Setup(s => s.GetUnreadNotificationsAsync(companyId, userId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetUnreadNotificationsAsync(It.Is<IReadOnlyCollection<Guid>>(c => c.Single() == companyId), userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<IEnumerable<NotificationDto>>.Ok(notifications));
 
         var result = await _getUnreadNotificationsUseCase.ExecuteAsync(query);
@@ -112,12 +112,12 @@ public class NotificationUseCasesTests
         var userId = Guid.NewGuid();
         var query = new GetUnreadCountQuery
         {
-            CompanyId = companyId,
+            CompanyIds = new[] { companyId },
             UserId = userId
         };
 
         _notificationServiceMock
-            .Setup(s => s.GetUnreadCountAsync(companyId, userId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetUnreadCountAsync(It.Is<IReadOnlyCollection<Guid>>(c => c.Single() == companyId), userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<int>.Ok(5));
 
         var result = await _getUnreadCountUseCase.ExecuteAsync(query);
@@ -136,7 +136,7 @@ public class NotificationUseCasesTests
         var command = new MarkNotificationAsReadCommand
         {
             NotificationId = notificationId,
-            CompanyId = companyId,
+            CompanyIds = new[] { companyId },
             UserId = userId
         };
 
@@ -150,7 +150,7 @@ public class NotificationUseCasesTests
         };
 
         _notificationServiceMock
-            .Setup(s => s.MarkAsReadAsync(notificationId, companyId, userId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.MarkAsReadAsync(notificationId, It.Is<IReadOnlyCollection<Guid>>(c => c.Single() == companyId), userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<NotificationDto>.Ok(updatedDto));
 
         var result = await _markNotificationAsReadUseCase.ExecuteAsync(command);
@@ -167,12 +167,12 @@ public class NotificationUseCasesTests
 
         var command = new MarkAllNotificationsAsReadCommand
         {
-            CompanyId = companyId,
+            CompanyIds = new[] { companyId },
             UserId = userId
         };
 
         _notificationServiceMock
-            .Setup(s => s.MarkAllAsReadAsync(companyId, userId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.MarkAllAsReadAsync(It.Is<IReadOnlyCollection<Guid>>(c => c.Single() == companyId), userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<int>.Ok(3));
 
         var result = await _markAllNotificationsAsReadUseCase.ExecuteAsync(command);

@@ -6,7 +6,7 @@ using SIGH.Application.Notifications.DTOs;
 
 public class GetUnreadNotificationsQuery
 {
-    public Guid CompanyId { get; set; }
+    public IReadOnlyCollection<Guid> CompanyIds { get; set; } = Array.Empty<Guid>();
     public Guid UserId { get; set; }
 }
 
@@ -26,11 +26,11 @@ public class GetUnreadNotificationsUseCase : IGetUnreadNotificationsUseCase
 
     public async Task<Result<IEnumerable<NotificationDto>>> ExecuteAsync(GetUnreadNotificationsQuery query, CancellationToken cancellationToken = default)
     {
-        if (query == null || query.CompanyId == Guid.Empty || query.UserId == Guid.Empty)
+        if (query == null || query.CompanyIds is not { Count: > 0 } || query.UserId == Guid.Empty)
         {
-            return Result<IEnumerable<NotificationDto>>.Failure("CompanyId e UserId são obrigatórios.", "REQUIRED_FIELDS_MISSING");
+            return Result<IEnumerable<NotificationDto>>.Failure("Empresa e usuário são obrigatórios.", "REQUIRED_FIELDS_MISSING");
         }
 
-        return await _notificationService.GetUnreadNotificationsAsync(query.CompanyId, query.UserId, cancellationToken);
+        return await _notificationService.GetUnreadNotificationsAsync(query.CompanyIds, query.UserId, cancellationToken);
     }
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { apiToken, authed, createUserApi, isoDay, loginUi } from './support/helpers';
 import { sapFile, syntheticCpf } from './support/xlsx';
@@ -187,4 +188,16 @@ test('multiempresa: Trapiche isolada da USGA, aprovação por empresa, jurídico
   });
   expect(allMode.status()).toBe(400);
   expect((await allMode.json()).code).toBe('COMPANY_REQUIRED');
+
+  // Empresa não autorizada é 404 (nunca 401, que a tela entende como sessão expirada) e a sessão continua valendo.
+  const otherCompany = await request.get(`/api/v1/notifications?companyId=${randomUUID()}`, { headers: authed(encarregadoTrap.token) });
+  expect(otherCompany.status()).toBe(404);
+  expect((await otherCompany.json()).code).toBe('COMPANY_NOT_FOUND');
+  expect((await request.get('/api/v1/auth/me', { headers: authed(encarregadoTrap.token) })).status()).toBe(200);
+  expect((await request.get('/api/v1/notifications', { headers: authed(encarregadoTrap.token) })).status()).toBe(200);
+  // Sem cabeçalho, quem tem duas empresas precisa escolher: o servidor não usa "a primeira".
+  const noHeader = await request.get('/api/v1/disciplinary-records', { headers: authed(legalToken) });
+  expect(noHeader.status()).toBe(400);
+  expect((await noHeader.json()).code).toBe('COMPANY_REQUIRED');
+  await expect(legal.getByTestId('company-banner')).toContainText('somente consulta');
 });

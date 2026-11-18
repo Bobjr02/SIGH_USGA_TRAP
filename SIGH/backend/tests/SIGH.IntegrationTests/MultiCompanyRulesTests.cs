@@ -4,7 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SIGH.Api.Demo;
+using SIGH.Demo;
 using SIGH.Application.Authentication.CurrentUser;
 using SIGH.Application.Common.Authorization;
 using SIGH.Application.Common.Models;

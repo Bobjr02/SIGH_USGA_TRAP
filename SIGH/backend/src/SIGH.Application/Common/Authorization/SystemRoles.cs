@@ -25,7 +25,6 @@ public static class SystemRoles
     private static readonly string[] Reports =
     [
         PermissionCodes.DisciplinaryReports.ViewDashboard,
-        PermissionCodes.DisciplinaryReports.ViewCases,
         PermissionCodes.DisciplinaryReports.ViewMeasures,
         PermissionCodes.DisciplinaryReports.ViewEmployeeHistory,
         PermissionCodes.DisciplinaryReports.Export,
