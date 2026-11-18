@@ -113,6 +113,9 @@ export const FIELD_LABELS: Record<string, string> = {
   managementUnit: 'Gerência',
   fileName: 'Nome do arquivo',
   valor: 'Valor',
+  entity: 'Registro',
+  action: 'Ação',
+  id: 'Identificador',
 };
 
 export const fieldLabel = (field: string) => FIELD_LABELS[field] ?? FIELD_LABELS[field.charAt(0).toUpperCase() + field.slice(1)] ?? humanize(field);
@@ -154,6 +157,11 @@ const enumGroupOf = (field: string, entity: string): EnumGroup | undefined => {
       return entity === 'DisciplinaryCaseEmployee' ? 'CaseEmployeeRole' : 'Role';
     case 'role':
       return 'Role';
+    // Detalhes dos eventos de segurança: "changes": [{ entity: "UserRole", action: "Created" }].
+    case 'entity':
+      return 'AuditEntity';
+    case 'action':
+      return 'AuditAction';
     default:
       return undefined;
   }
