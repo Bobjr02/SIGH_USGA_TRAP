@@ -75,6 +75,13 @@ export interface HistoryPreview {
   rejected: HistoryIssue[];
   absent: HistoryAbsent[];
   fileWarnings: string[];
+  /** Empresa para a qual o arquivo está indo. */
+  companyCode?: string;
+  companyName?: string;
+  /** Linhas rejeitadas por gerência de outra empresa. */
+  otherCompanyRows?: number;
+  /** Mais da metade das linhas é de outra empresa (alerta grande; confirmação bloqueada). */
+  looksLikeOtherCompany?: boolean;
 }
 
 export interface HistoryResult {

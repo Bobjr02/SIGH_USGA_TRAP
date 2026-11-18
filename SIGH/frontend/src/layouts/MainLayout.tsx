@@ -8,6 +8,7 @@ import { PERMISSIONS } from '../auth/permissions';
 import { NotificationBadge } from '../features/notifications/components/NotificationBadge';
 import { GlobalSearch } from './GlobalSearch';
 import { Sidebar } from './Sidebar';
+import { CompanyBanner, CompanySwitcher } from './CompanySwitcher';
 
 const COLLAPSE_KEY = 'sigh.sidebar.collapsed';
 
@@ -91,10 +92,12 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           </Tooltip>
           <div className="flex min-w-0 flex-1 justify-center md:justify-start">{hasPermission(PERMISSIONS.EMPLOYEES_VIEW) && <GlobalSearch />}</div>
           <div className="flex items-center gap-1">
+            <CompanySwitcher />
             {hasPermission(PERMISSIONS.NOTIFICATIONS_VIEW) && <NotificationBadge />}
             <ThemeToggle />
           </div>
         </header>
+        <CompanyBanner />
         <main id="conteudo" className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-8">
           {children}
         </main>

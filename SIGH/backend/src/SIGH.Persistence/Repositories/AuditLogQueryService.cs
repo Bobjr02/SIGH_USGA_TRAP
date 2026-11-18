@@ -156,7 +156,8 @@ public sealed class AuditLogQueryService : IAuditLogQueryService
                 a.IpAddress,
                 a.CorrelationId,
                 a.OldValues,
-                a.NewValues))
+                a.NewValues,
+                _context.Companies.Where(c => c.Id == a.CompanyId).Select(c => c.Name).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<AuditLogDto>(items, pageNumber, pageSize, total);

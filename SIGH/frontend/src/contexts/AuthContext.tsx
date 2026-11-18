@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { authApi, type CurrentUser } from '../auth/authApi';
+import { authApi, type CurrentUser, type UserCompany } from '../auth/authApi';
+import { ALL_COMPANIES, companyStore } from '../auth/companyStore';
+import { WRITE_PERMISSIONS } from '../auth/permissions';
 import { tokenStore } from '../auth/tokenStore';
 import { crossTab } from '../auth/crossTab';
 import { refreshAccessToken, setAuthEventHandlers } from '../services/api';
@@ -11,8 +13,20 @@ interface AuthContextType {
   status: AuthStatus;
   user: CurrentUser | null;
   isAuthenticated: boolean;
+  /** Permissões que valem AGORA: as da empresa ativa (no modo "Todas", as de leitura de todas as empresas). */
   permissions: string[];
   hasPermission: (permission: string) => boolean;
+  /** Empresas em que o usuário tem perfil vigente. */
+  companies: UserCompany[];
+  /** Código da empresa ativa, ou "TODAS" (só leitura). */
+  activeCompany: string | null;
+  /** A empresa ativa (nulo no modo "Todas"). */
+  activeCompanyInfo: UserCompany | null;
+  /** Modo "Todas": listas e relatórios das empresas do usuário, sem nenhuma escrita. */
+  isAllCompanies: boolean;
+  /** Mais de uma empresa: aparece o seletor no topo. */
+  canSwitchCompany: boolean;
+  setActiveCompany: (code: string) => void;
   hasAnyPermission: (permissions: string[]) => boolean;
   /** Autentica e carrega o usuário de GET /auth/me. */
   login: (email: string, password: string, rememberMe?: boolean) => Promise<CurrentUser>;
@@ -27,20 +41,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [activeCompany, setActiveCompanyState] = useState<string | null>(null);
 
   const endSession = useCallback(() => {
     tokenStore.clear();
+    companyStore.clear();
     queryClient.clear();
     setUser(null);
+    setActiveCompanyState(null);
     setStatus('unauthenticated');
   }, [queryClient]);
 
+  /**
+   * Empresa ativa depois de carregar o usuário: a lembrada no navegador, se ainda valer (perfil vigente nela;
+   * "Todas" só com duas ou mais empresas); senão, a do primeiro perfil vigente. Vale antes de qualquer outra requisição.
+   */
+  const applyCompany = useCallback((me: CurrentUser) => {
+    const companies = me.companies ?? [];
+    const remembered = companyStore.remembered(me.id);
+    const valid =
+      (remembered === ALL_COMPANIES && companies.length > 1) || companies.some((c) => c.code === remembered);
+    const selected = companies.length === 0 ? null : valid ? remembered : companies[0].code;
+    companyStore.set(selected, me.id);
+    setActiveCompanyState(selected);
+  }, []);
+
   const loadUser = useCallback(async () => {
     const me = await authApi.me();
+    applyCompany(me);
     setUser(me);
     setStatus('authenticated');
     return me;
-  }, []);
+  }, [applyCompany]);
 
   // Restauração de sessão: o access token não sobrevive ao reload; o cookie HttpOnly sim.
   useEffect(() => {
@@ -50,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then(() => (cancelled ? null : authApi.me()))
       .then((me) => {
         if (cancelled || !me) return;
+        applyCompany(me);
         setUser(me);
         setStatus('authenticated');
       })
@@ -63,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyCompany]);
 
   // O interceptor do axios avisa quando o refresh falha ou a API exige troca de senha.
   // As rotas reagem ao estado: ProtectedRoute leva para /login ou /change-password.
@@ -118,8 +151,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [endSession]);
 
+  const setActiveCompany = useCallback(
+    (code: string) => {
+      if (!user) return;
+      companyStore.set(code, user.id);
+      setActiveCompanyState(code);
+      // Outra empresa: nada do que estava em cache vale (listas, contadores, detalhes).
+      void queryClient.resetQueries();
+    },
+    [queryClient, user],
+  );
+
   const value = useMemo<AuthContextType>(() => {
-    const permissions = user?.permissions ?? [];
+    const companies = user?.companies ?? [];
+    const isAllCompanies = activeCompany === ALL_COMPANIES;
+    const activeCompanyInfo = companies.find((c) => c.code === activeCompany) ?? null;
+    // Sem a lista de empresas (cliente antigo da API), vale a lista única de permissões.
+    const permissions = !user?.companies
+      ? (user?.permissions ?? [])
+      : isAllCompanies
+        ? [...new Set(companies.flatMap((c) => c.permissions))].filter((p) => !WRITE_PERMISSIONS.has(p))
+        : (activeCompanyInfo?.permissions ?? []);
     const hasPermission = (permission: string) => permissions.includes(permission);
     return {
       status,
@@ -128,14 +180,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permissions,
       hasPermission,
       hasAnyPermission: (perms: string[]) => perms.some(hasPermission),
+      companies,
+      activeCompany,
+      activeCompanyInfo,
+      isAllCompanies,
+      canSwitchCompany: companies.length > 1,
+      setActiveCompany,
       login,
       changePassword,
       logout,
     };
-  }, [status, user, login, changePassword, logout]);
+  }, [status, user, activeCompany, setActiveCompany, login, changePassword, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+/** Modo "Todas" (coluna Empresa) para componentes que também aparecem fora do AuthProvider (testes isolados). */
+export const useIsAllCompanies = (): boolean => useContext(AuthContext)?.isAllCompanies ?? false;
 
 export const useAuthContext = (): AuthContextType => {
   const context = useContext(AuthContext);

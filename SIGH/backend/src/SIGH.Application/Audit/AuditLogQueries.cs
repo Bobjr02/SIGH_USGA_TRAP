@@ -28,7 +28,9 @@ public record AuditLogDto(
     string? IpAddress,
     string? CorrelationId,
     string? OldValues,
-    string? NewValues);
+    string? NewValues,
+    /// <summary>Empresa do registro (coluna Empresa no modo "Todas"); nulo nos eventos sem empresa (ex.: login).</summary>
+    string? CompanyName = null);
 
 /// <summary>Consulta somente leitura da trilha de auditoria.</summary>
 public interface IAuditLogQueryService

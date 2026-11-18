@@ -12,8 +12,23 @@ export interface CurrentUser {
   email: string;
   status: string;
   mustChangePassword: boolean;
+  /** União dos perfis de todas as empresas (só exibição). */
+  roles: string[];
+  /** União das permissões de todas as empresas (só para clientes antigos; a tela usa as da empresa ativa). */
+  permissions: string[];
+  /** Empresas em que o usuário tem perfil vigente, com os perfis e as permissões de cada uma. */
+  companies?: UserCompany[];
+}
+
+export interface UserCompany {
+  id: string;
+  /** Código curto (USGA, TRAP): é o valor enviado no cabeçalho X-SIGH-Company. */
+  code: string;
+  name: string;
+  managementUnitPrefix: string;
   roles: string[];
   permissions: string[];
+  managementUnitIds: string[];
 }
 
 export interface LoginResponse {

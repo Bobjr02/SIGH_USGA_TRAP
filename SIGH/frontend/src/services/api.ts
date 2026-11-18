@@ -1,6 +1,7 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 import { tokenStore } from '../auth/tokenStore';
 import { crossTab } from '../auth/crossTab';
+import { COMPANY_HEADER, companyStore } from '../auth/companyStore';
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -120,6 +121,11 @@ api.interceptors.request.use((config) => {
   config._sentToken = token;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Empresa ativa (o servidor valida: nunca confia nela sem conferir os perfis do usuário).
+  const company = companyStore.get();
+  if (company && !config.headers[COMPANY_HEADER]) {
+    config.headers[COMPANY_HEADER] = company;
   }
   return config;
 });
