@@ -90,11 +90,6 @@ public class ScopeEnforcementTests : IntegrationTestBase
             new ScopeCase(Found(s => $"/api/v1/disciplinary-cases/{s.Record131}/evidences/{s.Evidence131}/file")),
 
         // Dashboard: o gestor da 131 vê as 2 medidas da 131; o da 132, só a dele.
-        ["/api/v1/disciplinary-reports/dashboard"] = new ScopeCase(Number(_ => "/api/v1/disciplinary-reports/dashboard", d => d.GetProperty("totalCases").GetInt32(), 2)),
-        ["/api/v1/disciplinary-reports/cases"] = new ScopeCase(Contains(_ => "/api/v1/disciplinary-reports/cases?pageSize=100", s => s.Record131.ToString())),
-        ["/api/v1/disciplinary-reports/cases/export"] = new ScopeCase(Contains(_ => "/api/v1/disciplinary-reports/cases/export", s => s.Record131Number)),
-        ["/api/v1/disciplinary-reports/measures"] = new ScopeCase(Contains(_ => "/api/v1/disciplinary-reports/measures?pageSize=100", s => s.Employee131.ToString())),
-        ["/api/v1/disciplinary-reports/employees/{employeeId:guid}/history"] = new ScopeCase(Found(s => $"/api/v1/disciplinary-reports/employees/{s.Employee131}/history")),
 
         ["/api/v1/notifications"] = new ScopeCase(Contains(_ => "/api/v1/notifications", _ => "Aviso da medida 131")),
         ["/api/v1/notifications/unread"] = new ScopeCase(Contains(_ => "/api/v1/notifications/unread", _ => "Aviso da medida 131")),

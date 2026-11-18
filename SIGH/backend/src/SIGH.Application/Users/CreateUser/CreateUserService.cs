@@ -66,9 +66,9 @@ public class CreateUserService : ICreateUserService
         var cpf = request.Cpf.Trim();
 
         // A conta nasce na empresa ATIVA do administrador, com os perfis nela.
-        var companyId = _companies is null
-            ? SIGH.Application.Common.Authorization.CompanyDefaults.UsgaId
-            : await _companies.RequireWriteCompanyAsync(cancellationToken);
+        // Nunca escolhe empresa por conta própria: sem contexto de empresa não há como criar.
+        var companyId = await (_companies ?? throw new InvalidOperationException("Contexto de empresa indisponível."))
+            .RequireWriteCompanyAsync(cancellationToken);
 
         bool emailExists = await _userRepository.ExistsByEmailAsync(email, cancellationToken);
         if (emailExists)

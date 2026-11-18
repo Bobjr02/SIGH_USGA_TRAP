@@ -91,7 +91,6 @@ public static class PermissionCodes
     public static class DisciplinaryReports
     {
         public const string ViewDashboard = "Disciplinary.Reports.ViewDashboard";
-        public const string ViewCases = "Disciplinary.Reports.ViewCases";
         public const string ViewMeasures = "Disciplinary.Reports.ViewMeasures";
         public const string ViewEmployeeHistory = "Disciplinary.Reports.ViewEmployeeHistory";
         public const string Export = "Disciplinary.Reports.Export";
@@ -169,7 +168,6 @@ public static class PermissionCodes
 
         // Relatórios disciplinares
         new(DisciplinaryReports.ViewDashboard, "Visualizar painel disciplinar", "Consultar os indicadores do painel disciplinar."),
-        new(DisciplinaryReports.ViewCases, "Visualizar relatório de processos", "Consultar o relatório de processos disciplinares."),
         new(DisciplinaryReports.ViewMeasures, "Visualizar relatório de medidas", "Consultar o relatório de medidas disciplinares."),
         new(DisciplinaryReports.ViewEmployeeHistory, "Visualizar histórico disciplinar", "Consultar o histórico disciplinar de funcionários."),
         new(DisciplinaryReports.Export, "Exportar relatórios disciplinares", "Exportar relatórios disciplinares em CSV."),

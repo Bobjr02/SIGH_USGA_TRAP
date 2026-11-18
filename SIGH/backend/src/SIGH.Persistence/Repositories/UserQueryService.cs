@@ -25,11 +25,18 @@ public class UserQueryService : IUserQueryService
 
         // O administrador só vê os usuários das empresas dele (perfil, mesmo retirado, ou conta criada nelas).
         List<Guid>? companyIds = null;
+        Dictionary<Guid, string> companyNames;
         if (_companies is not null)
         {
-            companyIds = (await _companies.GetRequestGrantsAsync(cancellationToken)).Select(g => g.CompanyId).ToList();
+            var grants = await _companies.GetRequestGrantsAsync(cancellationToken);
+            companyIds = grants.Select(g => g.CompanyId).ToList();
+            companyNames = grants.ToDictionary(g => g.CompanyId, g => g.Company.Name);
             var visible = SIGH.Application.Users.Access.UserCompanyScope.VisibleUserIds(_context, companyIds);
             dbQuery = dbQuery.Where(u => visible.Contains(u.Id));
+        }
+        else
+        {
+            companyNames = await _context.Companies.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
@@ -70,7 +77,14 @@ public class UserQueryService : IUserQueryService
                 .Distinct()
                 .ToList(),
             u.CreatedAt,
-            u.LastLoginAt
+            u.LastLoginAt,
+            u.UserRoles.Where(ur => !ur.IsDeleted).Select(ur => ur.CompanyId)
+                .Append(u.CreatedInCompanyId ?? Guid.Empty)
+                .Where(companyNames.ContainsKey)
+                .Distinct()
+                .Select(id => companyNames[id])
+                .OrderBy(n => n, StringComparer.CurrentCulture)
+                .ToList()
         )).ToList();
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);

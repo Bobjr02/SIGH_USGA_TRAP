@@ -4,9 +4,9 @@ using SIGH.Application.Interfaces;
 namespace SIGH.Infrastructure.Services;
 
 /// <summary>
-/// Adaptador do <see cref="ICompanyContext"/> para os endpoints que recebem um CompanyId (relatórios antigos e
-/// notificações). As empresas autorizadas são as da requisição (empresa ativa, ou todas no modo "Todas", com a
-/// permissão da rota). Sem empresa pedida: a empresa ativa; no modo "Todas", a primeira empresa da requisição.
+/// Adaptador do <see cref="ICompanyContext"/> para os endpoints que aceitam um <c>companyId</c> opcional. As empresas
+/// autorizadas são as da requisição (empresa ativa, ou todas no modo "Todas", com a permissão da rota). Empresa pedida
+/// fora delas é 404 (<see cref="CompanyNotAccessibleException"/>); sem empresa pedida valem todas as da requisição.
 /// </summary>
 public class AuthorizedCompanyProvider : IAuthorizedCompanyProvider
 {
@@ -26,20 +26,19 @@ public class AuthorizedCompanyProvider : IAuthorizedCompanyProvider
         return (await GetAuthorizedCompanyIdsAsync(cancellationToken)).Contains(companyId);
     }
 
-    public async Task<Guid> GetAuthorizedCompanyIdAsync(Guid? requestedCompanyId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Guid>> ResolveCompanyIdsAsync(Guid? requestedCompanyId, CancellationToken cancellationToken = default)
     {
         var authorizedIds = await GetAuthorizedCompanyIdsAsync(cancellationToken);
         if (authorizedIds.Count == 0)
-            throw new UnauthorizedAccessException("Usuário não possui empresas autorizadas.");
+            throw new CompanyNotAccessibleException();
 
         if (requestedCompanyId is { } requested && requested != Guid.Empty)
         {
             if (!authorizedIds.Contains(requested))
-                throw new UnauthorizedAccessException("Acesso não autorizado à empresa informada.");
-            return requested;
+                throw new CompanyNotAccessibleException();
+            return new[] { requested };
         }
 
-        var selection = await _companies.GetSelectionAsync(cancellationToken);
-        return selection.CompanyId is { } active && authorizedIds.Contains(active) ? active : authorizedIds[0];
+        return authorizedIds;
     }
 }

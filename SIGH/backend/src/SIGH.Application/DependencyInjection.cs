@@ -38,7 +38,6 @@ public static class DependencyInjection
         services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
         services.Configure<NotificationReminderOptions>(configuration.GetSection(NotificationReminderOptions.SectionName));
         services.Configure<BackgroundWorkerOptions>(configuration.GetSection(BackgroundWorkerOptions.SectionName));
-        services.Configure<SIGH.Application.Disciplinary.Reports.Options.DisciplinaryReportOptions>(configuration.GetSection(SIGH.Application.Disciplinary.Reports.Options.DisciplinaryReportOptions.SectionName));
 
         // Registro dos Serviços da Camada de Aplicação (Vertical Slice)
         services.AddScoped<ILoginService, LoginService>();
@@ -120,12 +119,6 @@ public static class DependencyInjection
         services.AddScoped<SIGH.Application.Disciplinary.DisciplinaryCases.CancelDisciplinaryCase.ICancelDisciplinaryCaseUseCase, SIGH.Application.Disciplinary.DisciplinaryCases.CancelDisciplinaryCase.CancelDisciplinaryCaseUseCase>();
         services.AddScoped<SIGH.Application.Disciplinary.DisciplinaryCases.ConcludeDisciplinaryCase.IConcludeDisciplinaryCaseUseCase, SIGH.Application.Disciplinary.DisciplinaryCases.ConcludeDisciplinaryCase.ConcludeDisciplinaryCaseUseCase>();
 
-        // Registro de Casos de Uso do Módulo Disciplinar - Reports & Analytics
-        services.AddScoped<SIGH.Application.Disciplinary.Reports.UseCases.IGetEmployeeDisciplinaryHistoryUseCase, SIGH.Application.Disciplinary.Reports.UseCases.GetEmployeeDisciplinaryHistoryUseCase>();
-        services.AddScoped<SIGH.Application.Disciplinary.Reports.UseCases.IGetDisciplinaryDashboardUseCase, SIGH.Application.Disciplinary.Reports.UseCases.GetDisciplinaryDashboardUseCase>();
-        services.AddScoped<SIGH.Application.Disciplinary.Reports.UseCases.IGetDisciplinaryMeasuresUseCase, SIGH.Application.Disciplinary.Reports.UseCases.GetDisciplinaryMeasuresUseCase>();
-        services.AddScoped<SIGH.Application.Disciplinary.Reports.UseCases.IGetDisciplinaryCaseReportUseCase, SIGH.Application.Disciplinary.Reports.UseCases.GetDisciplinaryCaseReportUseCase>();
-        services.AddScoped<SIGH.Application.Disciplinary.Reports.UseCases.IExportDisciplinaryCaseReportCsvUseCase, SIGH.Application.Disciplinary.Reports.UseCases.ExportDisciplinaryCaseReportCsvUseCase>();
 
         // Registro de Casos de Uso do Módulo de Notificações
         services.AddScoped<SIGH.Application.Notifications.UseCases.IGetUserNotificationsUseCase, SIGH.Application.Notifications.UseCases.GetUserNotificationsUseCase>();

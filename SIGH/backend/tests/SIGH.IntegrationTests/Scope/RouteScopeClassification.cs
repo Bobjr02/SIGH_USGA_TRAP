@@ -29,12 +29,6 @@ public static class RouteScopeClassification
         "/api/v1/disciplinary-cases/{id:guid}/audit-trail",
         // Download de evidências (anexos das medidas)
         "/api/v1/disciplinary-cases/{caseId:guid}/evidences/{evidenceId:guid}/file",
-        // Relatórios, dashboard e exportação CSV
-        "/api/v1/disciplinary-reports/dashboard",
-        "/api/v1/disciplinary-reports/cases",
-        "/api/v1/disciplinary-reports/cases/export",
-        "/api/v1/disciplinary-reports/measures",
-        "/api/v1/disciplinary-reports/employees/{employeeId:guid}/history",
         // Notificações (as que apontam para medidas fora do escopo somem)
         "/api/v1/notifications",
         "/api/v1/notifications/unread",

@@ -345,20 +345,17 @@ public class HistoryImportTests : IntegrationTestBase
         unknown.Should().Match<RecordSummaryDto>(r => r.Origin == RecordOrigin.Historical && r.Status == RecordStatus.Historical
             && r.SuspensionDays == null && r.SuspensionDaysUnknown && r.ImportedAt != null && r.MeasureDate == new DateOnly(2025, 9, 1));
 
-        // Relatório de medidas: dias "não informado"; CSV com a coluna Origem.
-        var measures = await admin.GetStringAsync("/api/v1/disciplinary-reports/measures?pageSize=100&origin=2");
-        var items = JsonDocument.Parse(measures).RootElement.GetProperty("data").GetProperty("items").EnumerateArray().ToList();
-        items.Should().HaveCount(14).And.OnlyContain(i => i.GetProperty("origin").GetString() == "Histórico");
-        items.Count(i => i.GetProperty("suspensionDaysUnknown").GetBoolean()).Should().Be(1);
-        var csv = await admin.GetStringAsync("/api/v1/disciplinary-reports/cases/export");
-        csv.Split('\n')[0].TrimEnd('\r').Should().EndWith("Origem");
+        // Lista de medidas: dias "não informado"; CSV com a coluna Origem.
+        var historical = (await List(admin, $"origin={(int)RecordOrigin.Historical}")).Items;
+        historical.Should().HaveCount(14).And.OnlyContain(r => r.Origin == RecordOrigin.Historical);
+        historical.Count(r => r.SuspensionDaysUnknown).Should().Be(1);
+        var csv = (await admin.GetStringAsync("/api/v1/disciplinary-records/export")).TrimStart('\uFEFF');
+        csv.Split('\n')[0].Should().Contain("Origem");
         csv.Should().Contain("Histórico");
 
-        // Linha do tempo do funcionário: selo do lote.
-        var e07 = await ReferenceData.EmployeeIdAsync(Factory, "50090007");
-        var history = await admin.GetStringAsync($"/api/v1/disciplinary-reports/employees/{e07}/history");
-        var cases = JsonDocument.Parse(history).RootElement.GetProperty("data").GetProperty("cases").EnumerateArray().ToList();
-        cases.Should().HaveCount(3).And.OnlyContain(c => c.GetProperty("origin").GetString() == "Histórico" && c.GetProperty("importedAt").ValueKind != JsonValueKind.Null);
+        // Medidas do funcionário: selo do lote.
+        var e07 = (await List(admin, "employee=50090007")).Items;
+        e07.Should().HaveCount(3).And.OnlyContain(r => r.Origin == RecordOrigin.Historical && r.ImportedAt != null);
 
         // Escopo (mesma regra do sprint 6: gerência ATUAL do funcionário). 50090012 tem GERÊNCIA da época = USGA132,
         // mas está hoje na USGA131: o gestor da 132 não o vê; vê a 50090000 (USGA132).

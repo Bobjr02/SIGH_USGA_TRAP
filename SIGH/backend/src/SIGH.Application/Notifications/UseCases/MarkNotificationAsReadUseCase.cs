@@ -8,7 +8,7 @@ using SIGH.Application.Notifications.DTOs;
 public class MarkNotificationAsReadCommand
 {
     public Guid NotificationId { get; set; }
-    public Guid CompanyId { get; set; }
+    public IReadOnlyCollection<Guid> CompanyIds { get; set; } = Array.Empty<Guid>();
     public Guid UserId { get; set; }
 }
 
@@ -24,8 +24,8 @@ public class MarkNotificationAsReadCommandValidator : AbstractValidator<MarkNoti
         RuleFor(x => x.NotificationId)
             .NotEmpty().WithMessage("NotificationId é obrigatório.");
 
-        RuleFor(x => x.CompanyId)
-            .NotEmpty().WithMessage("CompanyId é obrigatório.");
+        RuleFor(x => x.CompanyIds)
+            .NotEmpty().WithMessage("Ao menos uma empresa é obrigatória.");
 
         RuleFor(x => x.UserId)
             .NotEmpty().WithMessage("UserId é obrigatório.");
@@ -57,6 +57,6 @@ public class MarkNotificationAsReadUseCase : IMarkNotificationAsReadUseCase
             return Result<NotificationDto>.Failure("Dados inválidos para marcar notificação como lida.", "VALIDATION_ERROR", errors);
         }
 
-        return await _notificationService.MarkAsReadAsync(command.NotificationId, command.CompanyId, command.UserId, cancellationToken);
+        return await _notificationService.MarkAsReadAsync(command.NotificationId, command.CompanyIds, command.UserId, cancellationToken);
     }
 }

@@ -79,11 +79,6 @@ public class CompanyIsolationTests : IClassFixture<CustomWebApplicationFactory>
         ["GET /api/v1/disciplinary-cases/{caseId:guid}/evidences/{evidenceId:guid}/file"] =
             (Probe)Found(s => $"/api/v1/disciplinary-cases/{s.TrapRecord}/evidences/{s.TrapEvidence}/file"),
 
-        ["GET /api/v1/disciplinary-reports/dashboard"] = (Probe)Number(_ => "/api/v1/disciplinary-reports/dashboard", d => d.GetProperty("totalCases").GetInt32()),
-        ["GET /api/v1/disciplinary-reports/cases"] = (Probe)Contains(_ => "/api/v1/disciplinary-reports/cases?pageSize=100", s => s.TrapRecord.ToString()),
-        ["GET /api/v1/disciplinary-reports/cases/export"] = (Probe)Contains(_ => "/api/v1/disciplinary-reports/cases/export", s => s.TrapRecordNumber),
-        ["GET /api/v1/disciplinary-reports/measures"] = (Probe)Contains(_ => "/api/v1/disciplinary-reports/measures?pageSize=100", s => s.TrapApprovedRecord.ToString()),
-        ["GET /api/v1/disciplinary-reports/employees/{employeeId:guid}/history"] = (Probe)Found(s => $"/api/v1/disciplinary-reports/employees/{s.TrapEmployee}/history"),
 
         ["GET /api/v1/notifications"] = (Probe)Contains(_ => "/api/v1/notifications?pageSize=100", _ => CompanyScenario.TrapNotificationTitle),
         ["GET /api/v1/notifications/unread"] = (Probe)Contains(_ => "/api/v1/notifications/unread", _ => CompanyScenario.TrapNotificationTitle),
@@ -201,11 +196,11 @@ public class CompanyIsolationTests : IClassFixture<CustomWebApplicationFactory>
 
         // Importações: a confirmação de um lote da Trapiche; a pré-visualização e o encerramento PARA a Trapiche
         // (empresa ativa pedida pelo cliente sem perfil nela: 404).
-        ["POST /api/v1/employees/import/preview"] = new(_ => Xlsx("/api/v1/employees/import/preview", SIGH.Api.Demo.TrapicheDemoSpreadsheets.EmployeesXlsx()), null, CompanyDefaults.TrapicheCode),
-        ["POST /api/v1/employees/import/{batchId:guid}/confirm"] = new(s => Xlsx($"/api/v1/employees/import/{s.TrapEmployeeBatch}/confirm", SIGH.Api.Demo.TrapicheDemoSpreadsheets.EmployeesXlsx()),
+        ["POST /api/v1/employees/import/preview"] = new(_ => Xlsx("/api/v1/employees/import/preview", SIGH.Demo.TrapicheDemoSpreadsheets.EmployeesXlsx()), null, CompanyDefaults.TrapicheCode),
+        ["POST /api/v1/employees/import/{batchId:guid}/confirm"] = new(s => Xlsx($"/api/v1/employees/import/{s.TrapEmployeeBatch}/confirm", SIGH.Demo.TrapicheDemoSpreadsheets.EmployeesXlsx()),
             _ => "/api/v1/employees/import/batches"),
-        ["POST /api/v1/disciplinary-history/import/preview"] = new(_ => Xlsx("/api/v1/disciplinary-history/import/preview", SIGH.Api.Demo.TrapicheDemoSpreadsheets.HistoryXlsx()), null, CompanyDefaults.TrapicheCode),
-        ["POST /api/v1/disciplinary-history/import/{batchId:guid}/confirm"] = new(s => Xlsx($"/api/v1/disciplinary-history/import/{s.TrapHistoryBatch}/confirm", SIGH.Api.Demo.TrapicheDemoSpreadsheets.HistoryXlsx()),
+        ["POST /api/v1/disciplinary-history/import/preview"] = new(_ => Xlsx("/api/v1/disciplinary-history/import/preview", SIGH.Demo.TrapicheDemoSpreadsheets.HistoryXlsx()), null, CompanyDefaults.TrapicheCode),
+        ["POST /api/v1/disciplinary-history/import/{batchId:guid}/confirm"] = new(s => Xlsx($"/api/v1/disciplinary-history/import/{s.TrapHistoryBatch}/confirm", SIGH.Demo.TrapicheDemoSpreadsheets.HistoryXlsx()),
             _ => "/api/v1/disciplinary-history/import/batches"),
         ["POST /api/v1/disciplinary-history/import/close"] = new(_ => Json(HttpMethod.Post, "/api/v1/disciplinary-history/import/close"), null, CompanyDefaults.TrapicheCode),
 

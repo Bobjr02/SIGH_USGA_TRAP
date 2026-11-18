@@ -15,8 +15,8 @@ public class GetNotificationsQueryValidator : AbstractValidator<GetNotifications
 {
     public GetNotificationsQueryValidator()
     {
-        RuleFor(x => x.CompanyId)
-            .NotEmpty().WithMessage("CompanyId é obrigatório.");
+        RuleFor(x => x.CompanyIds)
+            .NotEmpty().WithMessage("Ao menos uma empresa é obrigatória.");
 
         RuleFor(x => x.UserId)
             .NotEmpty().WithMessage("UserId é obrigatório.");

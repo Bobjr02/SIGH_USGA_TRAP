@@ -67,7 +67,7 @@ public class NotificationService : INotificationService
         return Result<NotificationDto>.Ok(dto, "Notificação criada com sucesso.");
     }
 
-    public async Task<Result<NotificationDto>> MarkAsReadAsync(Guid notificationId, Guid companyId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<Result<NotificationDto>> MarkAsReadAsync(Guid notificationId, IReadOnlyCollection<Guid> companyIds, Guid userId, CancellationToken cancellationToken = default)
     {
         if (notificationId == Guid.Empty)
             return Result<NotificationDto>.Failure("Id da notificação inválido.", "INVALID_NOTIFICATION_ID");
@@ -77,7 +77,7 @@ public class NotificationService : INotificationService
             return Result<NotificationDto>.Failure("Repositório de notificações não disponível.", "REPOSITORY_UNAVAILABLE");
         }
 
-        var notification = await _repository.GetByIdForUserAsync(notificationId, companyId, userId, cancellationToken);
+        var notification = await _repository.GetByIdForUserAsync(notificationId, companyIds, userId, cancellationToken);
         if (notification == null)
         {
             return Result<NotificationDto>.Failure("Notificação não encontrada ou não pertence ao usuário informado.", "NOTIFICATION_NOT_FOUND");
@@ -94,10 +94,10 @@ public class NotificationService : INotificationService
         return Result<NotificationDto>.Ok(MapToDto(notification), "Notificação marcada como lida.");
     }
 
-    public async Task<Result<int>> MarkAllAsReadAsync(Guid companyId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<Result<int>> MarkAllAsReadAsync(IReadOnlyCollection<Guid> companyIds, Guid userId, CancellationToken cancellationToken = default)
     {
-        if (companyId == Guid.Empty || userId == Guid.Empty)
-            return Result<int>.Failure("CompanyId e UserId são obrigatórios.", "REQUIRED_FIELDS_MISSING");
+        if (companyIds is not { Count: > 0 } || userId == Guid.Empty)
+            return Result<int>.Failure("Empresa e usuário são obrigatórios.", "REQUIRED_FIELDS_MISSING");
 
         if (_repository == null || _dbContext == null)
         {
@@ -105,7 +105,7 @@ public class NotificationService : INotificationService
         }
 
         var now = _dateTimeProvider?.UtcNow ?? DateTimeOffset.UtcNow;
-        var count = await _repository.MarkAllAsReadAsync(companyId, userId, now, cancellationToken);
+        var count = await _repository.MarkAllAsReadAsync(companyIds, userId, now, cancellationToken);
         if (count > 0)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -117,7 +117,7 @@ public class NotificationService : INotificationService
     }
 
     public async Task<Result<PagedResult<NotificationDto>>> GetUserNotificationsAsync(
-        Guid companyId,
+        IReadOnlyCollection<Guid> companyIds,
         Guid userId,
         int pageNumber,
         int pageSize,
@@ -125,7 +125,7 @@ public class NotificationService : INotificationService
     {
         var q = new SIGH.Application.Notifications.Queries.GetNotificationsQuery
         {
-            CompanyId = companyId,
+            CompanyIds = companyIds,
             UserId = userId,
             PageNumber = pageNumber,
             PageSize = pageSize
@@ -148,7 +148,7 @@ public class NotificationService : INotificationService
     }
 
     public async Task<Result<IEnumerable<NotificationDto>>> GetUnreadNotificationsAsync(
-        Guid companyId,
+        IReadOnlyCollection<Guid> companyIds,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -157,12 +157,12 @@ public class NotificationService : INotificationService
             return Result<IEnumerable<NotificationDto>>.Ok(Enumerable.Empty<NotificationDto>());
         }
 
-        var result = await _repository.GetUnreadUserNotificationsAsync(companyId, userId, cancellationToken);
+        var result = await _repository.GetUnreadUserNotificationsAsync(companyIds, userId, cancellationToken);
         return Result<IEnumerable<NotificationDto>>.Ok(result);
     }
 
     public async Task<Result<int>> GetUnreadCountAsync(
-        Guid companyId,
+        IReadOnlyCollection<Guid> companyIds,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -171,7 +171,7 @@ public class NotificationService : INotificationService
             return Result<int>.Ok(0);
         }
 
-        var count = await _repository.GetUnreadCountAsync(companyId, userId, cancellationToken);
+        var count = await _repository.GetUnreadCountAsync(companyIds, userId, cancellationToken);
         return Result<int>.Ok(count);
     }
 
@@ -214,15 +214,6 @@ public class NotificationService : INotificationService
         }
 
         return Result<int>.Ok(count, $"Processadas {count} notificações.");
-    }
-
-    public async Task<Result<IEnumerable<NotificationDto>>> GetPendingNotificationsAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        if (_repository == null)
-            return Result<IEnumerable<NotificationDto>>.Ok(Enumerable.Empty<NotificationDto>());
-
-        var unread = await _repository.GetUnreadUserNotificationsAsync(Guid.Empty, userId, cancellationToken);
-        return Result<IEnumerable<NotificationDto>>.Ok(unread);
     }
 
     private static NotificationDto MapToDto(Notification notification)
