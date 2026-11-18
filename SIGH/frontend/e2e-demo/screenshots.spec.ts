@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, type Page } from '@playwright/test';
-import { login, profile, settle } from './support/demo';
+import { login, profile, selectCompany, settle } from './support/demo';
 import { DETAILS, openDetail } from './support/pages';
-import { attachableRecord, EMPLOYEES_FILE, HISTORY_FILE } from './support/files';
+import { attachableRecord, EMPLOYEES_FILE, HISTORY_FILE, otherCompanyPreview } from './support/files';
 
 // Capturas para o dono do produto (SIGH/docs/telas), deviceScaleFactor 1, temas escuro e claro;
 // login e painel também em largura de celular (390 px). Só roda com SIGH_SCREENSHOTS=1.
@@ -48,6 +48,15 @@ const SCREENS: { file: string; who: string; path?: string; detail?: string; prep
   },
   // Anexos da medida: o auxiliar numa medida aprovada (pode anexar a carta assinada).
   { file: '16-anexos-da-medida', who: 'auxiliar', prepare: attachableRecord },
+  // Multiempresa: o seletor (jurídico, nas duas empresas), o modo "Todas" e o alerta de arquivo de outra empresa.
+  { file: '17-seletor-de-empresa', who: 'juridico', path: '/painel', prepare: (page) => page.getByRole('combobox', { name: 'Empresa' }).click() },
+  {
+    file: '18-modo-todas',
+    who: 'juridico',
+    path: '/medidas',
+    prepare: (page) => selectCompany(page, 'Todas'),
+  },
+  { file: '19-importacao-outra-empresa', who: 'admin.trap', path: '/employees/import', prepare: otherCompanyPreview },
 ];
 
 for (const theme of ['escuro', 'claro'] as const) {

@@ -7,6 +7,8 @@ namespace SIGH.Domain.Disciplinary.Entities;
 
 public class InfractionType : AuditableEntity
 {
+    /// <summary>Empresa dona do motivo: cada empresa tem o próprio catálogo (código único por empresa).</summary>
+    public Guid CompanyId { get; private set; }
     public string Code { get; private set; } = string.Empty;
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
@@ -97,6 +99,9 @@ public class InfractionType : AuditableEntity
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
         LegalReference = string.IsNullOrWhiteSpace(legalReference) ? null : legalReference.Trim();
     }
+
+    /// <summary>Define a empresa dona do motivo (uma única vez).</summary>
+    public void AssignToCompany(Guid companyId) => CompanyId = CompanyAssignment.Assign(CompanyId, companyId);
 
     public void Activate()
     {

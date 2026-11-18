@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
@@ -23,17 +24,20 @@ public class HistoryImportController : BaseController
     }
 
     [HttpGet("status")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryHistory.Import)]
     public async Task<ActionResult<Result<HistoryImportStatusDto>>> Status(CancellationToken cancellationToken) =>
         OkResult(await _service.GetStatusAsync(cancellationToken));
 
     [HttpGet("batches")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryHistory.Import)]
     public async Task<ActionResult<Result<PagedResult<HistoryImportBatchDto>>>> Batches(
         [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default) =>
         OkResult(await _service.ListBatchesAsync(pageNumber, pageSize, cancellationToken));
 
     [HttpPost("preview")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryHistory.Import)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<Result<HistoryImportPreviewDto>>> Preview(IFormFile? file, CancellationToken cancellationToken)
@@ -46,6 +50,7 @@ public class HistoryImportController : BaseController
     }
 
     [HttpPost("{batchId:guid}/confirm")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryHistory.Import)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<Result<HistoryImportResultDto>>> Confirm([FromRoute] Guid batchId, IFormFile? file, CancellationToken cancellationToken)
@@ -59,6 +64,7 @@ public class HistoryImportController : BaseController
 
     /// <summary>Encerra a importação (sem reabertura pela tela; só por History:ImportClosed=false). Auditado.</summary>
     [HttpPost("close")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryHistory.Import)]
     public async Task<ActionResult<Result<HistoryImportStatusDto>>> Close(CancellationToken cancellationToken) =>
         ToActionResult(await _service.CloseAsync(GetUserId(), cancellationToken));

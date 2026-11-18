@@ -18,6 +18,12 @@ public class User : AuditableEntity
     /// </summary>
     public string SecurityStamp { get; set; } = NewSecurityStamp();
 
+    /// <summary>
+    /// Empresa em que a conta foi criada (pelo administrador dela). Com os perfis (vigentes ou não) define
+    /// quais administradores enxergam o usuário. Nulo: criado pelo seed sem empresa.
+    /// </summary>
+    public Guid? CreatedInCompanyId { get; set; }
+
     // Navigation Properties
     public virtual ICollection<PasswordHistory> PasswordHistories { get; set; } = new List<PasswordHistory>();
     public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

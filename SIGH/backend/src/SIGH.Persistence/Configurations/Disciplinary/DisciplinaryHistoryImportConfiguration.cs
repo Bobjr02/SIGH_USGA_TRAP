@@ -17,6 +17,8 @@ public class DisciplinaryHistoryImportBatchConfiguration : IEntityTypeConfigurat
         builder.Property(b => b.PlanFingerprint).HasMaxLength(64).IsUnicode(false).IsRequired();
         builder.HasIndex(b => b.PreviewedAt);
         builder.HasIndex(b => b.FileSha256);
+        builder.HasIndex(b => new { b.CompanyId, b.PreviewedAt });
+        builder.HasOne<SIGH.Domain.Employees.Entities.Company>().WithMany().HasForeignKey(b => b.CompanyId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -26,5 +28,8 @@ public class HistoryImportStateConfiguration : AuditableEntityConfiguration<Hist
     {
         base.Configure(builder);
         builder.ToTable("HistoryImportStates");
+        // Uma linha por empresa (o encerramento é por empresa).
+        builder.HasIndex(s => s.CompanyId).IsUnique().HasDatabaseName("UX_HistoryImportStates_CompanyId");
+        builder.HasOne<SIGH.Domain.Employees.Entities.Company>().WithMany().HasForeignKey(s => s.CompanyId).OnDelete(DeleteBehavior.Restrict);
     }
 }

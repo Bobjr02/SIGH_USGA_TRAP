@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -48,6 +49,7 @@ public class AuthController : BaseController
     }
 
     [HttpPost("login")]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "conta e sessão do próprio usuário (sem dados de empresa)")]
     [EnableRateLimiting("LoginIpRateLimit")]
     [ProducesResponseType(typeof(Result<LoginHttpResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -69,6 +71,7 @@ public class AuthController : BaseController
     /// Revoga o refresh token do cookie (e a sessão informada, se houver) e apaga o cookie.
     /// </summary>
     [HttpPost("logout")]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "conta e sessão do próprio usuário (sem dados de empresa)")]
     [Authorize]
     [AllowWhilePasswordChangeRequired]
     [AllowRevokedSession]
@@ -88,6 +91,7 @@ public class AuthController : BaseController
     /// Renova o access token usando o refresh token do cookie sigh_rt. O corpo da requisição é ignorado.
     /// </summary>
     [HttpPost("refresh")]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "conta e sessão do próprio usuário (sem dados de empresa)")]
     [AllowWhilePasswordChangeRequired]
     [ProducesResponseType(typeof(Result<RefreshHttpResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -126,6 +130,7 @@ public class AuthController : BaseController
     /// Liberado durante a troca de senha obrigatória.
     /// </summary>
     [HttpGet("me")]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "conta e sessão do próprio usuário (sem dados de empresa)")]
     [Authorize]
     [AllowWhilePasswordChangeRequired]
     [ProducesResponseType(typeof(Result<CurrentUserResponse>), StatusCodes.Status200OK)]
@@ -141,6 +146,7 @@ public class AuthController : BaseController
     /// (outbox), com token de uso único válido por Auth:PasswordResetTokenMinutes.
     /// </summary>
     [HttpPost("forgot-password")]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "conta e sessão do próprio usuário (sem dados de empresa)")]
     [EnableRateLimiting("ForgotPasswordRateLimit")]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(Result<ForgotPasswordResponse>), StatusCodes.Status200OK)]
@@ -152,6 +158,7 @@ public class AuthController : BaseController
 
     /// <summary>Redefine a senha com o token do link. Revoga todas as sessões e refresh tokens do usuário.</summary>
     [HttpPost("reset-password")]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "conta e sessão do próprio usuário (sem dados de empresa)")]
     [EnableRateLimiting("ResetPasswordRateLimit")]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(Result<ResetPasswordResponse>), StatusCodes.Status200OK)]
@@ -163,6 +170,7 @@ public class AuthController : BaseController
     }
 
     [HttpPost("change-password")]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "conta e sessão do próprio usuário (sem dados de empresa)")]
     [Authorize]
     [AllowWhilePasswordChangeRequired]
     [ProducesResponseType(typeof(Result<ChangePasswordHttpResponse>), StatusCodes.Status200OK)]

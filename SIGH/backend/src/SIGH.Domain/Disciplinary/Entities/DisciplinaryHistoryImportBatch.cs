@@ -22,6 +22,11 @@ public class DisciplinaryHistoryImportBatch : Entity
 {
     public const int MaxFileNameLength = 255;
 
+    /// <summary>Empresa para a qual o arquivo foi importado (a empresa ativa de quem importou).</summary>
+    public Guid CompanyId { get; private set; }
+
+    public void AssignToCompany(Guid companyId) => CompanyId = CompanyAssignment.Assign(CompanyId, companyId);
+
     public string FileName { get; private set; } = string.Empty;
     public string FileSha256 { get; private set; } = string.Empty;
     public HistoryImportBatchStatus Status { get; private set; } = HistoryImportBatchStatus.Previewed;
@@ -95,11 +100,15 @@ public class DisciplinaryHistoryImportBatch : Entity
 
 /// <summary>
 /// Estado da importação do histórico. Encerrada pela tela (sem volta pela tela); reabrir só por configuração
-/// (History:ImportClosed), aplicada e auditada no startup. Linha única (Id fixo). Entidade auditada.
+/// (History:ImportClosed), aplicada e auditada no startup. Uma linha POR EMPRESA (o encerramento de uma
+/// empresa não encerra a outra). Entidade auditada.
 /// </summary>
 public class HistoryImportState : AuditableEntity
 {
+    /// <summary>Id da linha da USGA (a linha única de antes da multiempresa).</summary>
     public static readonly Guid SingletonId = Guid.Parse("4a1b0000-0000-4000-8000-000000000001");
+
+    public Guid CompanyId { get; private set; }
 
     public bool IsClosed { get; private set; }
     public DateTimeOffset? ClosedAt { get; private set; }
@@ -109,7 +118,12 @@ public class HistoryImportState : AuditableEntity
 
     private HistoryImportState(Guid id) : base(id) { }
 
-    public static HistoryImportState CreateOpen() => new(SingletonId);
+    public static HistoryImportState CreateOpen(Guid companyId)
+    {
+        if (companyId == Guid.Empty)
+            throw new ArgumentException("A empresa é obrigatória.", nameof(companyId));
+        return new HistoryImportState(Guid.NewGuid()) { CompanyId = companyId };
+    }
 
     public void Close(Guid? userId, DateTimeOffset now)
     {

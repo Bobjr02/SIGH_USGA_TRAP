@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
@@ -65,6 +66,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Cadastra um novo funcionário na empresa informada com validação de regras de negócio.</description>
     [HttpPost]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.Create)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -85,6 +87,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Retorna os detalhes completos de um funcionário a partir do seu identificador único (ID).</description>
     [HttpGet("{id:guid}", Name = "GetEmployeeById")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Employees.View)]
     [Produces("application/json")]
     [ProducesResponseType(typeof(Result<GetEmployeeByIdResponse>), StatusCodes.Status200OK)]
@@ -104,6 +107,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Obtém a listagem paginada de funcionários aplicando filtros como empresa, unidade gestora, departamento, cargo, status e termo de busca.</description>
     [HttpGet]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Employees.View)]
     [Produces("application/json")]
     [ProducesResponseType(typeof(Result<PagedResult<EmployeeListItemResponse>>), StatusCodes.Status200OK)]
@@ -122,6 +126,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Atualiza os dados cadastrais e de identificação de um funcionário existente.</description>
     [HttpPut("{id:guid}")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.Update)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -145,6 +150,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Altera o cargo, unidade gestora e departamento associados ao funcionário.</description>
     [HttpPatch("{id:guid}/organizational-assignment")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.ChangeOrganizationalAssignment)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -168,6 +174,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Define ou altera o gestor/supervisor responsável pelo funcionário.</description>
     [HttpPatch("{id:guid}/supervisor")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.ChangeSupervisor)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -191,6 +198,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Altera o status do funcionário conforme as regras de transição permitidas.</description>
     [HttpPatch("{id:guid}/status")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.ChangeStatus)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -214,6 +222,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Efetua o desligamento/demissão do funcionário com registro de data e motivo.</description>
     [HttpPatch("{id:guid}/terminate")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.Terminate)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -237,6 +246,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Reativa o cadastro de um funcionário desligado informando a nova data de admissão.</description>
     [HttpPatch("{id:guid}/reactivate")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.Reactivate)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -260,6 +270,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Associa uma conta de usuário do sistema ao cadastro do funcionário.</description>
     [HttpPatch("{id:guid}/link-user")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.LinkUser)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -283,6 +294,7 @@ public class EmployeesController : BaseController
     /// </summary>
     /// <description>Remove o vínculo da conta de usuário de sistema com o cadastro do funcionário.</description>
     [HttpPatch("{id:guid}/unlink-user")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.UnlinkUser)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -367,6 +379,7 @@ public class EmployeesController : BaseController
     /// Disciplinary.Reports.ViewEmployeeHistory (expõe histórico disciplinar).
     /// </summary>
     [HttpGet("{id:guid}/decision-support")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Employees.View)]
     [Permission(PermissionCodes.DisciplinaryReports.ViewEmployeeHistory)]
     [ProducesResponseType(typeof(Result<SIGH.Application.Employees.DecisionSupport.EmployeeDecisionSupportDto>), StatusCodes.Status200OK)]
@@ -384,6 +397,7 @@ public class EmployeesController : BaseController
 
     /// <summary>Gerências (Chave Organização) e setores (Uni.Org) para os filtros da lista.</summary>
     [HttpGet("filter-options")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Employees.View)]
     [ProducesResponseType(typeof(Result<SIGH.Application.Employees.Common.EmployeeFilterOptionsDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<Result<SIGH.Application.Employees.Common.EmployeeFilterOptionsDto>>> GetFilterOptions(

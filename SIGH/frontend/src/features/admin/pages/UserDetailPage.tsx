@@ -127,7 +127,8 @@ export const UserDetailPage: React.FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { user: me, hasPermission } = useAuth();
+  const { user: me, hasPermission, activeCompanyInfo } = useAuth();
+  const companyName = activeCompanyInfo?.name ?? 'esta empresa';
   const [params] = useSearchParams();
   const [tab, setTab] = useState<TabKey>(params.get('aba') === 'perfis' ? 'perfis' : 'informacoes');
   const [error, setError] = useState<string | null>(null);
@@ -237,6 +238,12 @@ export const UserDetailPage: React.FC = () => {
       />
       <div className="mb-4 flex flex-col gap-2">
         {self && <Alert severity="info">Este é o seu usuário: perfis, gerências e situação só podem ser alterados por outro administrador.</Alert>}
+        {access.data?.hasAccessInOtherCompany && (
+          <Alert severity="info" data-testid="other-company-access">
+            Esta pessoa também tem acesso a outra empresa do grupo. A conta não pode ser desativada nem desbloqueada daqui: retire os
+            perfis da {companyName} para que ela perca o acesso só a esta empresa.
+          </Alert>
+        )}
         {message && (
           <Alert severity="success" onClose={() => setMessage(null)}>
             {message}
@@ -269,8 +276,11 @@ export const UserDetailPage: React.FC = () => {
 
       <TabPanel active={tab === 'perfis'} idPrefix="usuario" tabKey="perfis">
       <Paper component="section" aria-label="Perfis" elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h6" component="h2" sx={{ fontWeight: 700 }}>
-          Perfis
+        <Typography variant="h6" component="h2" sx={{ fontWeight: 700 }} data-testid="roles-company">
+          Perfis na empresa {companyName}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Os perfis atribuídos aqui valem só na {companyName}. Perfis de outras empresas não aparecem.
         </Typography>
         <Table size="small">
           <TableHead>

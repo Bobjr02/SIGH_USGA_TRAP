@@ -9,6 +9,7 @@ import { RecordStatusChip } from '../../../components/ui/StatusChip';
 import { ActionIcon } from '../../../components/ui/ActionIcon';
 import { label } from '../../../i18n/labels';
 import { formatDate, formatDays } from '../../../utils/formatters';
+import { useIsAllCompanies } from '../../../contexts/AuthContext';
 
 interface RecordsTableProps {
   data?: PagedResult<RecordSummary>;
@@ -49,7 +50,12 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   reportColumns,
   hideEmployee,
 }) => {
+  // Modo "Todas": a coluna Empresa diz de qual empresa é cada medida.
+  const isAllCompanies = useIsAllCompanies();
   const columns: Column<RecordSummary>[] = [
+    ...(isAllCompanies
+      ? [{ key: 'company', header: 'Empresa', render: (r: RecordSummary) => <span data-testid="record-company">{r.companyName ?? '—'}</span> }]
+      : []),
     {
       key: 'number',
       header: 'Número',

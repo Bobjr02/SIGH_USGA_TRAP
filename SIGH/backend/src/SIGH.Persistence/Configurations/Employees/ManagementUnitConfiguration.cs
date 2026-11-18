@@ -44,7 +44,10 @@ public class ManagementUnitConfiguration : AuditableEntityConfiguration<Manageme
         builder.HasIndex(m => new { m.CompanyId, m.Name })
             .HasDatabaseName("IX_ManagementUnits_CompanyId_Name");
 
+        // Código (Chave Organização) único por empresa.
         builder.HasIndex(m => new { m.CompanyId, m.Code })
+            .IsUnique()
+            .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0")
             .HasDatabaseName("IX_ManagementUnits_CompanyId_Code");
     }
 }

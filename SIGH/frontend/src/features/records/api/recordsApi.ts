@@ -86,6 +86,10 @@ export interface RecordSummary {
   /** Vigência: só suspensões. */
   suspensionStart?: string | null;
   suspensionEnd?: string | null;
+  /** Empresa da medida (coluna Empresa no modo "Todas"). */
+  companyId?: string;
+  companyCode?: string | null;
+  companyName?: string | null;
 }
 
 export interface RecordEvidence {

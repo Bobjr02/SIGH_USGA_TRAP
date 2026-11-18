@@ -23,6 +23,7 @@ public class AuditLogsController : BaseController
 
     /// <summary>Lista paginada (mais recentes primeiro), com filtros por entidade, id, usuário, ação e período.</summary>
     [HttpGet]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Audit.View)]
     [ProducesResponseType(typeof(Result<PagedResult<AuditLogDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -46,6 +47,7 @@ public class AuditLogsController : BaseController
 
     /// <summary>Seletor "Usuário" da auditoria: busca por nome ou e-mail (até 20). Exige Audit.View.</summary>
     [HttpGet("users")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Audit.View)]
     public async Task<ActionResult<Result<IReadOnlyList<AuditUserOptionDto>>>> SearchUsers([FromQuery] string? search, CancellationToken cancellationToken = default) =>
         OkResult(await _queryService.SearchUsersAsync(search, cancellationToken));

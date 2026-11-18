@@ -290,7 +290,7 @@ public class EvidenceFilesEndpointsTests : IntegrationTestBase
     {
         var response = await client.PostAsJsonAsync("/api/v1/disciplinary-cases", new CreateDisciplinaryCaseHttpRequest(
             CaseNumber: $"EVD-{Guid.NewGuid():N}"[..12],
-            CompanyId: Guid.NewGuid(),
+            CompanyId: SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId,
             Title: "Processo com evidências",
             Description: "Processo usado nos testes de evidência."));
         response.IsSuccessStatusCode.Should().BeTrue(await response.Content.ReadAsStringAsync());

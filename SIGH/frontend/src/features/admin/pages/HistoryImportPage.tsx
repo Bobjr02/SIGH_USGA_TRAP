@@ -35,6 +35,7 @@ import { formatDateTime } from '../../../utils/formatters';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FilePicker } from '../../../components/ui/FilePicker';
 import { ImportSteps } from '../../../components/ui/ImportSteps';
+import { ImportTargetCompany, OtherCompanyFileAlert, useImportCompany } from '../../../components/ui/ImportCompany';
 
 const formatInstant = (value?: string | null) => formatDateTime(value);
 
@@ -248,6 +249,8 @@ export const HistoryImportPage: React.FC = () => {
   });
 
   const closed = status.data?.isClosed === true;
+  const { blocked: noCompany, company } = useImportCompany();
+  const otherCompany = !!preview?.looksLikeOtherCompany;
   // Passo 1 escolher, 2 pré-visualizar, 3 confirmar; aplicada, os três ficam concluídos.
   const step = applied ? 3 : preview ? 2 : file ? 1 : 0;
 
@@ -259,9 +262,10 @@ export const HistoryImportPage: React.FC = () => {
         Importe antes a base de funcionários do SAP: o histórico só se liga a funcionários que já existem.
       </Typography>
 
-      {closed && (
+      <ImportTargetCompany />
+      {closed && !noCompany && (
         <Alert severity="info" icon={<Lock size={18} />} data-testid="history-closed">
-          Importação encerrada em {formatInstant(status.data?.closedAt)} por {status.data?.closedByName ?? '—'}. Não há reabertura pela tela.
+          Importação encerrada{company ? ` na ${company.name}` : ''} em {formatInstant(status.data?.closedAt)} por {status.data?.closedByName ?? '—'}. Não há reabertura pela tela.
         </Alert>
       )}
       {message && (
@@ -275,7 +279,7 @@ export const HistoryImportPage: React.FC = () => {
         </Alert>
       )}
 
-      {!closed && (
+      {!closed && !noCompany && (
         <Paper component="section" aria-label="Enviar planilha" elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
           <ImportSteps active={step} />
           <FilePicker
@@ -306,9 +310,15 @@ export const HistoryImportPage: React.FC = () => {
 
       {preview && (
         <Paper component="section" aria-label="Pré-visualização" elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <OtherCompanyFileAlert show={otherCompany} rows={preview.otherCompanyRows} companyName={preview.companyName} />
           <Typography variant="h6" component="h2" sx={{ fontWeight: 700 }}>
             Pré-visualização — nada foi gravado
           </Typography>
+          {preview.companyName && (
+            <Typography variant="body2" data-testid="preview-company">
+              Importando para: <strong>{preview.companyName}</strong>
+            </Typography>
+          )}
           <Typography variant="body2" data-testid="history-summary">
             {preview.summary.totalRows} linhas com dados: {preview.summary.toImport} a importar, {preview.summary.existing} já existentes,{' '}
             {preview.summary.toUpdate} a corrigir, {preview.summary.rejected} rejeitadas, {preview.summary.warnings} avisos,{' '}
@@ -321,7 +331,7 @@ export const HistoryImportPage: React.FC = () => {
           ))}
           <PreviewTabs preview={preview} />
           <Box>
-            <Button variant="contained" color="success" disabled={doConfirm.isPending || !file} onClick={() => doConfirm.mutate()}>
+            <Button variant="contained" color="success" disabled={doConfirm.isPending || !file || otherCompany} onClick={() => doConfirm.mutate()}>
               Confirmar importação
             </Button>
           </Box>

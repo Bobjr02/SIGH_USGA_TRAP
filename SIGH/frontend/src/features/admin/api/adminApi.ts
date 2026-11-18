@@ -74,6 +74,10 @@ export interface UserRoleLink {
   validFrom?: string | null;
   validUntil?: string | null;
   state: ValidityState;
+  /** Empresa em que o perfil vale. */
+  companyId?: string;
+  companyCode?: string | null;
+  companyName?: string | null;
 }
 
 export interface UserUnitLink {
@@ -88,9 +92,15 @@ export interface UserUnitLink {
 
 export interface UserAccess {
   userId: string;
+  /** Só os perfis da empresa do administrador (os de outra empresa nunca aparecem). */
   roles: UserRoleLink[];
   managementUnits: UserUnitLink[];
+  /** A pessoa tem perfil vigente em outra empresa (a conta não pode ser desativada daqui). */
+  hasAccessInOtherCompany?: boolean;
 }
+
+/** Código do 409 de POST /users quando o e-mail é de uma conta de outra empresa do grupo. */
+export const USER_EXISTS_IN_ANOTHER_COMPANY = 'USER_EXISTS_IN_ANOTHER_COMPANY';
 
 export interface ManagementUnit {
   id: string;
@@ -136,6 +146,12 @@ export const adminApi = {
   async createUser(input: CreateUserInput): Promise<{ id: string }> {
     const response = await api.post<Result<{ id: string }>>('/v1/users', { ...input, initialPassword: null });
     return unwrap(response.data, 'Erro ao criar o usuário.');
+  },
+
+  /** Vincula à empresa ativa uma conta que já existe (outra empresa do grupo), com perfis nesta empresa. */
+  async linkUser(input: { email: string; roleIds: string[]; managementUnitIds: string[] }): Promise<{ userId: string }> {
+    const response = await api.post<Result<{ userId: string }>>('/v1/users/link', input);
+    return unwrap(response.data, 'Erro ao vincular o usuário.');
   },
 
   async changeStatus(id: string, newStatus: UserStatus, reason: string): Promise<void> {

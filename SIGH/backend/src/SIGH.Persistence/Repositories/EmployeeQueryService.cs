@@ -258,11 +258,12 @@ public class EmployeeQueryService : IEmployeeQueryService
         // Máscara do escopo: o gestor não vê as gerências (nem os setores) fora do escopo nos filtros.
         var scope = await _scope.GetFilterAsync(cancellationToken);
         var unitIds = scope.ManagementUnitIds.ToList();
-        var units = await _context.ManagementUnits.AsNoTracking().Where(m => m.IsActive && (scope.All || unitIds.Contains(m.Id)))
+        var full = scope.FullCompanyIds.ToList();
+        var units = await _context.ManagementUnits.AsNoTracking().Where(m => m.IsActive && (full.Contains(m.CompanyId) || unitIds.Contains(m.Id)))
             .OrderBy(m => m.Code).ThenBy(m => m.Name)
             .Select(m => new OrganizationOptionDto(m.Id, m.Code, m.Name, null))
             .ToListAsync(cancellationToken);
-        var departments = await _context.Departments.AsNoTracking().Where(d => d.IsActive && (scope.All || unitIds.Contains(d.ManagementUnitId)))
+        var departments = await _context.Departments.AsNoTracking().Where(d => d.IsActive && (full.Contains(d.CompanyId) || unitIds.Contains(d.ManagementUnitId)))
             .OrderBy(d => d.Name)
             .Select(d => new OrganizationOptionDto(d.Id, d.Code, d.Name, d.ManagementUnitId))
             .ToListAsync(cancellationToken);

@@ -162,11 +162,17 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         var unprivilegedUser = CreateUser(UnprivilegedUserId, "Usuário Sem Permissao", "unprivileged@sigh.com", "11122233344", passwordHash);
 
         db.Users.AddRange(adminUser, approverUser, lockedUser, unprivilegedUser);
+        // Os usuários de fixture são da USGA (a empresa dos dados de antes da multiempresa).
+        var usga = DatabaseSeeder.DefaultCompanyId;
+        adminUser.CreatedInCompanyId = usga;
+        approverUser.CreatedInCompanyId = usga;
+        lockedUser.CreatedInCompanyId = usga;
+        unprivilegedUser.CreatedInCompanyId = usga;
         db.UserRoles.AddRange(
-            new UserRole(Guid.NewGuid()) { UserId = adminUser.Id, RoleId = administratorRole.Id },
-            new UserRole(Guid.NewGuid()) { UserId = adminUser.Id, RoleId = fullAccessRole.Id },
-            new UserRole(Guid.NewGuid()) { UserId = approverUser.Id, RoleId = administratorRole.Id },
-            new UserRole(Guid.NewGuid()) { UserId = approverUser.Id, RoleId = fullAccessRole.Id });
+            new UserRole(Guid.NewGuid()) { UserId = adminUser.Id, RoleId = administratorRole.Id, CompanyId = usga },
+            new UserRole(Guid.NewGuid()) { UserId = adminUser.Id, RoleId = fullAccessRole.Id, CompanyId = usga },
+            new UserRole(Guid.NewGuid()) { UserId = approverUser.Id, RoleId = administratorRole.Id, CompanyId = usga },
+            new UserRole(Guid.NewGuid()) { UserId = approverUser.Id, RoleId = fullAccessRole.Id, CompanyId = usga });
 
         await db.SaveChangesAsync();
     }

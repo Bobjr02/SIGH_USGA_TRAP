@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using SIGH.Application.Common.Authorization;
 using SIGH.Application.Common.Interfaces;
 using SIGH.Application.Common.Models;
 using SIGH.Application.Disciplinary.Records;
@@ -37,6 +38,10 @@ public static class HistoryImportErrors
     public const string BatchAlreadyApplied = "HistoryImport.Batch.AlreadyApplied";
     public const string FileMismatch = "HistoryImport.FileMismatch";
     public const string PlanChanged = "HistoryImport.PlanChanged";
+    public const string OtherCompanyFile = "HistoryImport.OtherCompanyFile";
+
+    public const string OtherCompanyFileMessage =
+        "Este arquivo parece ser de outra empresa: mais da metade das linhas tem gerência de outra empresa. Confira o arquivo e a empresa selecionada no topo.";
 
     public const string ClosedMessage =
         "A importação do histórico disciplinar foi encerrada: o SIGH é agora a única fonte das medidas. " +
@@ -66,13 +71,16 @@ public sealed record HistoryImportPreviewDto(
     Guid BatchId, string FileName, string FileSha256, DateTimeOffset ExpiresAt, HistoryImportSummaryDto Summary,
     IReadOnlyList<HistoryRowDto> ToImport, IReadOnlyList<HistoryRowDto> Existing, IReadOnlyList<HistoryUpdateDto> ToUpdate,
     IReadOnlyList<string> NewInfractionTypes, IReadOnlyList<HistoryIssue> Warnings, IReadOnlyList<HistoryIssue> Rejected,
-    IReadOnlyList<HistoryAbsentDto> Absent, IReadOnlyList<string> FileWarnings);
+    IReadOnlyList<HistoryAbsentDto> Absent, IReadOnlyList<string> FileWarnings,
+    /// <summary>Empresa para a qual o arquivo está indo ("Importando para: Trapiche").</summary>
+    string CompanyCode = "", string CompanyName = "",
+    int OtherCompanyRows = 0, bool LooksLikeOtherCompany = false);
 
 public sealed record HistoryImportResultDto(Guid BatchId, HistoryImportSummaryDto Summary, int Imported, int Updated, int InfractionTypesCreated, DateTimeOffset AppliedAt);
 
 public sealed record HistoryImportBatchDto(
     Guid Id, string FileName, string FileSha256, string Status, DateTimeOffset PreviewedAt, string? PreviewedByName,
-    DateTimeOffset? AppliedAt, string? AppliedByName, HistoryImportSummaryDto Summary);
+    DateTimeOffset? AppliedAt, string? AppliedByName, HistoryImportSummaryDto Summary, string? CompanyName = null);
 
 public sealed record HistoryImportStatusDto(bool IsClosed, DateTimeOffset? ClosedAt, string? ClosedByName);
 
@@ -97,13 +105,13 @@ public sealed class HistoryImportService : IHistoryImportService
 {
     private readonly IApplicationDbContext _db;
     private readonly ISpreadsheetTableReader _reader;
-    private readonly IAuthorizedCompanyProvider _company;
+    private readonly ICompanyContext _company;
     private readonly IDateTimeProvider _clock;
     private readonly ISecurityAuditLogger _audit;
     private readonly HistoryImportOptions _options;
 
     public HistoryImportService(
-        IApplicationDbContext db, ISpreadsheetTableReader reader, IAuthorizedCompanyProvider company, IDateTimeProvider clock,
+        IApplicationDbContext db, ISpreadsheetTableReader reader, ICompanyContext company, IDateTimeProvider clock,
         ISecurityAuditLogger audit, IOptions<HistoryImportOptions> options)
     {
         _db = db;
@@ -116,9 +124,28 @@ public sealed class HistoryImportService : IHistoryImportService
 
     // ---- estado ----
 
+    /// <summary>
+    /// Empresa das leituras da importação (estado): a empresa ativa; no modo "Todas", a primeira empresa da
+    /// requisição (a tela pede uma empresa específica para importar).
+    /// </summary>
+    private async Task<Guid> ReadCompanyAsync(CancellationToken cancellationToken)
+    {
+        var selection = await _company.GetSelectionAsync(cancellationToken);
+        if (selection.CompanyId is { } active)
+            return active;
+        var grants = await _company.GetRequestGrantsAsync(cancellationToken);
+        return grants.Count > 0 ? grants[0].CompanyId : Guid.Empty;
+    }
+
     public async Task<HistoryImportStatusDto> GetStatusAsync(CancellationToken cancellationToken = default)
     {
-        var state = await _db.HistoryImportStates.AsNoTracking().FirstOrDefaultAsync(s => s.Id == HistoryImportState.SingletonId, cancellationToken);
+        var companyId = await ReadCompanyAsync(cancellationToken);
+        return await StatusOfAsync(companyId, cancellationToken);
+    }
+
+    private async Task<HistoryImportStatusDto> StatusOfAsync(Guid companyId, CancellationToken cancellationToken)
+    {
+        var state = await _db.HistoryImportStates.AsNoTracking().FirstOrDefaultAsync(s => s.CompanyId == companyId, cancellationToken);
         if (state is null || !state.IsClosed)
             return new HistoryImportStatusDto(false, null, null);
         var name = state.ClosedByUserId is { } id
@@ -129,7 +156,9 @@ public sealed class HistoryImportService : IHistoryImportService
 
     public async Task<Result<HistoryImportStatusDto>> CloseAsync(Guid actorUserId, CancellationToken cancellationToken = default)
     {
-        var state = await LoadStateAsync(cancellationToken);
+        // O encerramento é da empresa ativa: a outra empresa continua podendo importar.
+        var companyId = await _company.RequireWriteCompanyAsync(cancellationToken);
+        var state = await LoadStateAsync(companyId, cancellationToken);
         if (state.IsClosed)
             return Result<HistoryImportStatusDto>.Failure(HistoryImportErrors.ClosedMessage, HistoryImportErrors.Closed);
 
@@ -137,7 +166,7 @@ public sealed class HistoryImportService : IHistoryImportService
         await _db.SaveChangesAsync(cancellationToken);
         await _audit.RecordAsync(HistoryAuditActions.ImportClosed, actorUserId, new { closedAt = state.ClosedAt }, cancellationToken,
             nameof(HistoryImportState), state.Id.ToString());
-        return Result<HistoryImportStatusDto>.Ok(await GetStatusAsync(cancellationToken), "Importação de histórico encerrada.");
+        return Result<HistoryImportStatusDto>.Ok(await StatusOfAsync(companyId, cancellationToken), "Importação de histórico encerrada.");
     }
 
     public async Task SyncStateWithConfigurationAsync(CancellationToken cancellationToken = default)
@@ -145,56 +174,72 @@ public sealed class HistoryImportService : IHistoryImportService
         if (_options.ImportClosed is not { } configured)
             return;
 
-        var state = await LoadStateAsync(cancellationToken);
-        if (state.IsClosed == configured)
-            return;
+        // A configuração vale para todas as empresas (é o único jeito de reabrir; auditado por empresa).
+        var companyIds = await _db.Companies.AsNoTracking().Select(c => c.Id).ToListAsync(cancellationToken);
+        foreach (var companyId in companyIds)
+        {
+            var state = await LoadStateAsync(companyId, cancellationToken);
+            if (state.IsClosed == configured)
+                continue;
 
-        if (configured) state.Close(null, _clock.UtcNow);
-        else state.ReopenByConfiguration();
-        await _db.SaveChangesAsync(cancellationToken);
-        await _audit.RecordAsync(configured ? HistoryAuditActions.ImportClosedByConfiguration : HistoryAuditActions.ImportReopenedByConfiguration,
-            null, new { setting = "History:ImportClosed", value = configured }, cancellationToken, nameof(HistoryImportState), state.Id.ToString());
+            if (configured) state.Close(null, _clock.UtcNow);
+            else state.ReopenByConfiguration();
+            await _db.SaveChangesAsync(cancellationToken);
+            await _audit.RecordAsync(configured ? HistoryAuditActions.ImportClosedByConfiguration : HistoryAuditActions.ImportReopenedByConfiguration,
+                null, new { setting = "History:ImportClosed", value = configured, companyId }, cancellationToken, nameof(HistoryImportState), state.Id.ToString());
+        }
     }
 
-    private async Task<HistoryImportState> LoadStateAsync(CancellationToken cancellationToken)
+    private async Task<HistoryImportState> LoadStateAsync(Guid companyId, CancellationToken cancellationToken)
     {
-        var state = await _db.HistoryImportStates.FirstOrDefaultAsync(s => s.Id == HistoryImportState.SingletonId, cancellationToken);
+        var state = await _db.HistoryImportStates.FirstOrDefaultAsync(s => s.CompanyId == companyId, cancellationToken);
         if (state is not null)
             return state;
-        state = HistoryImportState.CreateOpen();
+        state = HistoryImportState.CreateOpen(companyId);
         _db.HistoryImportStates.Add(state);
         return state;
     }
 
-    private async Task<bool> IsClosedAsync(CancellationToken cancellationToken) =>
-        await _db.HistoryImportStates.AsNoTracking().AnyAsync(s => s.Id == HistoryImportState.SingletonId && s.IsClosed, cancellationToken);
+    private async Task<bool> IsClosedAsync(Guid companyId, CancellationToken cancellationToken) =>
+        await _db.HistoryImportStates.AsNoTracking().AnyAsync(s => s.CompanyId == companyId && s.IsClosed, cancellationToken);
+
+    private async Task<CompanyInfo> WriteCompanyAsync(CancellationToken cancellationToken)
+    {
+        var companyId = await _company.RequireWriteCompanyAsync(cancellationToken);
+        return (await _company.GetGrantsAsync(cancellationToken)).Single(g => g.CompanyId == companyId).Company;
+    }
 
     // ---- pré-visualização e confirmação ----
 
     public async Task<Result<HistoryImportPreviewDto>> PreviewAsync(Stream file, string fileName, Guid actorUserId, CancellationToken cancellationToken = default)
     {
-        if (await IsClosedAsync(cancellationToken))
+        // Sempre para a empresa ativa (específica).
+        var company = await WriteCompanyAsync(cancellationToken);
+        if (await IsClosedAsync(company.Id, cancellationToken))
             return Result<HistoryImportPreviewDto>.Failure(HistoryImportErrors.ClosedMessage, HistoryImportErrors.Closed);
 
-        var (hash, plan, fileWarnings, error) = await BuildPlanAsync(file, cancellationToken);
+        var (hash, plan, fileWarnings, error) = await BuildPlanAsync(file, company, cancellationToken);
         if (plan is null)
             return Result<HistoryImportPreviewDto>.Failure(error!, HistoryImportErrors.InvalidFile);
 
         var now = _clock.UtcNow;
         var batch = DisciplinaryHistoryImportBatch.CreatePreview(fileName, hash, actorUserId, now,
             TimeSpan.FromMinutes(Math.Max(1, _options.PreviewValidityMinutes)), Counts(plan), plan.Fingerprint, IssuesJson(plan));
+        batch.AssignToCompany(company.Id);
         _db.DisciplinaryHistoryImportBatches.Add(batch);
         await _db.SaveChangesAsync(cancellationToken);
 
-        return Result<HistoryImportPreviewDto>.Ok(ToPreview(batch, plan, fileWarnings), "Pré-visualização pronta. Nada foi gravado.");
+        return Result<HistoryImportPreviewDto>.Ok(ToPreview(batch, plan, fileWarnings, company), "Pré-visualização pronta. Nada foi gravado.");
     }
 
     public async Task<Result<HistoryImportResultDto>> ConfirmAsync(Guid batchId, Stream file, Guid actorUserId, CancellationToken cancellationToken = default)
     {
-        if (await IsClosedAsync(cancellationToken))
+        var company = await WriteCompanyAsync(cancellationToken);
+        if (await IsClosedAsync(company.Id, cancellationToken))
             return Result<HistoryImportResultDto>.Failure(HistoryImportErrors.ClosedMessage, HistoryImportErrors.Closed);
 
-        var batch = await _db.DisciplinaryHistoryImportBatches.FirstOrDefaultAsync(b => b.Id == batchId, cancellationToken);
+        // Lote de outra empresa: "não existe".
+        var batch = await _db.DisciplinaryHistoryImportBatches.FirstOrDefaultAsync(b => b.Id == batchId && b.CompanyId == company.Id, cancellationToken);
         if (batch is null)
             return Result<HistoryImportResultDto>.Failure("Lote de importação não encontrado.", HistoryImportErrors.BatchNotFound);
         if (batch.Status == HistoryImportBatchStatus.Applied)
@@ -202,24 +247,27 @@ public sealed class HistoryImportService : IHistoryImportService
         if (batch.IsExpired(_clock.UtcNow))
             return Result<HistoryImportResultDto>.Failure("A pré-visualização expirou. Envie o arquivo de novo.", HistoryImportErrors.BatchExpired);
 
-        var (hash, plan, _, error) = await BuildPlanAsync(file, cancellationToken);
+        var (hash, plan, _, error) = await BuildPlanAsync(file, company, cancellationToken);
         if (plan is null)
             return Result<HistoryImportResultDto>.Failure(error!, HistoryImportErrors.InvalidFile);
+        if (plan.LooksLikeOtherCompany)
+            return Result<HistoryImportResultDto>.Failure(HistoryImportErrors.OtherCompanyFileMessage, HistoryImportErrors.OtherCompanyFile);
         if (!string.Equals(hash, batch.FileSha256, StringComparison.OrdinalIgnoreCase))
             return Result<HistoryImportResultDto>.Failure("O arquivo enviado não é o mesmo da pré-visualização.", HistoryImportErrors.FileMismatch);
         if (plan.Fingerprint != batch.PlanFingerprint)
             return Result<HistoryImportResultDto>.Failure("Os dados mudaram desde a pré-visualização. Faça a pré-visualização de novo.", HistoryImportErrors.PlanChanged);
 
         var now = _clock.UtcNow;
-        var companyId = await _company.GetAuthorizedCompanyIdAsync(null, cancellationToken);
+        var companyId = company.Id;
 
-        // Motivos novos: criados ativos, com código gerado a partir do nome.
+        // Motivos novos: criados ativos NA EMPRESA, com código gerado a partir do nome.
         var created = new Dictionary<string, InfractionType>(StringComparer.Ordinal);
-        var usedCodes = (await _db.InfractionTypes.IgnoreQueryFilters().Select(i => i.Code).ToListAsync(cancellationToken)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var usedCodes = (await _db.InfractionTypes.IgnoreQueryFilters().Where(i => i.CompanyId == companyId).Select(i => i.Code).ToListAsync(cancellationToken)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var name in plan.NewInfractionTypes)
         {
             var type = InfractionType.Create(NewCode(name, usedCodes), Truncate(name.Trim(), 100), InfractionSeverity.Moderate,
                 description: "Criado pela importação do histórico disciplinar.");
+            type.AssignToCompany(companyId);
             _db.InfractionTypes.Add(type);
             created[HistoryKeys.Normalize(name)] = type;
         }
@@ -285,7 +333,10 @@ public sealed class HistoryImportService : IHistoryImportService
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = _db.DisciplinaryHistoryImportBatches.AsNoTracking();
+        // Só os lotes das empresas da requisição (a ativa, ou todas no modo "Todas").
+        var companyIds = (await _company.GetRequestGrantsAsync(cancellationToken)).Select(g => g.CompanyId).ToList();
+        var companyNames = await _db.Companies.AsNoTracking().Where(c => companyIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
+        var query = _db.DisciplinaryHistoryImportBatches.AsNoTracking().Where(b => companyIds.Contains(b.CompanyId));
         var total = await query.CountAsync(cancellationToken);
         var batches = await query.OrderByDescending(b => b.PreviewedAt).Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
         var userIds = batches.SelectMany(b => new[] { (Guid?)b.PreviewedByUserId, b.AppliedByUserId }).Where(x => x is not null).Select(x => x!.Value).Distinct().ToList();
@@ -294,14 +345,15 @@ public sealed class HistoryImportService : IHistoryImportService
         var items = batches.Select(b => new HistoryImportBatchDto(
             b.Id, b.FileName, b.FileSha256, b.Status.ToString(), b.PreviewedAt, names.GetValueOrDefault(b.PreviewedByUserId),
             b.AppliedAt, b.AppliedByUserId is { } a ? names.GetValueOrDefault(a) : null,
-            new HistoryImportSummaryDto(b.TotalRows, b.ImportedCount, b.ExistingCount, b.UpdatedCount, b.RejectedCount, b.WarningCount, b.NewInfractionTypeCount, b.AbsentCount)))
+            new HistoryImportSummaryDto(b.TotalRows, b.ImportedCount, b.ExistingCount, b.UpdatedCount, b.RejectedCount, b.WarningCount, b.NewInfractionTypeCount, b.AbsentCount),
+            companyNames.GetValueOrDefault(b.CompanyId)))
             .ToList();
         return new PagedResult<HistoryImportBatchDto>(items, pageNumber, pageSize, total);
     }
 
     // ---- plano ----
 
-    private async Task<(string Hash, HistoryImportPlan? Plan, IReadOnlyList<string> FileWarnings, string? Error)> BuildPlanAsync(Stream file, CancellationToken cancellationToken)
+    private async Task<(string Hash, HistoryImportPlan? Plan, IReadOnlyList<string> FileWarnings, string? Error)> BuildPlanAsync(Stream file, CompanyInfo company, CancellationToken cancellationToken)
     {
         using var buffer = new MemoryStream();
         await file.CopyToAsync(buffer, cancellationToken);
@@ -327,20 +379,28 @@ public sealed class HistoryImportService : IHistoryImportService
             return (r.RowNumber, (string?)(number.Length == 0 ? null : number), row, error);
         }).ToList();
 
-        return (hash, HistoryImportPlanner.Plan(parsed, await LoadReferenceAsync(cancellationToken)), table.Warnings, null);
+        return (hash, HistoryImportPlanner.Plan(parsed, await LoadReferenceAsync(company, cancellationToken)), table.Warnings, null);
     }
 
-    private async Task<HistoryReference> LoadReferenceAsync(CancellationToken cancellationToken)
+    /// <summary>Tudo da EMPRESA da importação: funcionários, gerências, motivos e registros já gravados.</summary>
+    private async Task<HistoryReference> LoadReferenceAsync(CompanyInfo company, CancellationToken cancellationToken)
     {
-        var employees = await _db.Employees.AsNoTracking()
+        var companyId = company.Id;
+        var employees = await _db.Employees.AsNoTracking().Where(e => e.CompanyId == companyId)
             .Select(e => new HistoryEmployeeRef(e.Id, e.EmployeeNumber, e.FullName, e.ManagementUnitId))
             .ToListAsync(cancellationToken);
-        var units = await _db.ManagementUnits.AsNoTracking().Select(m => new HistoryUnitRef(m.Id, m.Code, m.Name)).ToListAsync(cancellationToken);
-        var infractions = await _db.InfractionTypes.AsNoTracking().Select(i => new HistoryInfractionRef(i.Id, i.Name)).ToListAsync(cancellationToken);
+        var allUnits = await _db.ManagementUnits.AsNoTracking().Select(m => new { m.CompanyId, Unit = new HistoryUnitRef(m.Id, m.Code, m.Name) }).ToListAsync(cancellationToken);
+        var units = allUnits.Where(u => u.CompanyId == companyId).Select(u => u.Unit).ToList();
+        var ownKeys = units.SelectMany(u => new[] { HistoryKeys.Normalize(u.Name), HistoryKeys.Normalize(u.Code) }).ToHashSet(StringComparer.Ordinal);
+        var otherKeys = allUnits.Where(u => u.CompanyId != companyId)
+            .SelectMany(u => new[] { HistoryKeys.Normalize(u.Unit.Name), HistoryKeys.Normalize(u.Unit.Code) })
+            .Where(k => k.Length > 0 && !ownKeys.Contains(k))
+            .ToHashSet(StringComparer.Ordinal);
+        var infractions = await _db.InfractionTypes.AsNoTracking().Where(i => i.CompanyId == companyId).Select(i => new HistoryInfractionRef(i.Id, i.Name)).ToListAsync(cancellationToken);
 
         var historical = await (
             from c in _db.DisciplinaryCases.AsNoTracking()
-            where c.Kind == DisciplinaryCaseKind.Historical && c.HistoryKey != null
+            where c.Kind == DisciplinaryCaseKind.Historical && c.HistoryKey != null && c.CompanyId == companyId
             let accused = c.Employees.FirstOrDefault(e => e.Role == CaseEmployeeRole.Accused)
             let measure = c.Measures.FirstOrDefault()
             let occurrence = c.Occurrences.FirstOrDefault()
@@ -367,7 +427,7 @@ public sealed class HistoryImportService : IHistoryImportService
         var sigh = await (
             from m in _db.DisciplinaryMeasures.AsNoTracking()
             join c in _db.DisciplinaryCases.AsNoTracking() on m.DisciplinaryCaseId equals c.Id
-            where c.Kind != DisciplinaryCaseKind.Historical
+            where c.Kind != DisciplinaryCaseKind.Historical && c.CompanyId == companyId
                   && (m.Status == DisciplinaryMeasureStatus.Applied || m.Status == DisciplinaryMeasureStatus.Completed)
             join d in _db.DisciplinaryDecisions.AsNoTracking() on m.DisciplinaryDecisionId equals d.Id into decisions
             from d in decisions.DefaultIfEmpty()
@@ -379,7 +439,9 @@ public sealed class HistoryImportService : IHistoryImportService
             units,
             infractions.GroupBy(i => HistoryKeys.Normalize(i.Name)).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal),
             existing,
-            sigh.Select(s => new CountedMeasure(s.EmployeeId, s.MeasureDate ?? BusinessCalendar.DateOf(s.AppliedAt ?? s.EffectiveFrom), s.MeasureType)).ToList());
+            sigh.Select(s => new CountedMeasure(s.EmployeeId, s.MeasureDate ?? BusinessCalendar.DateOf(s.AppliedAt ?? s.EffectiveFrom), s.MeasureType)).ToList(),
+            otherKeys,
+            company.ManagementUnitPrefix);
     }
 
     private async Task<InfractionSeverity> SeverityOfAsync(Guid id, CancellationToken cancellationToken) =>
@@ -398,7 +460,7 @@ public sealed class HistoryImportService : IHistoryImportService
         p.Row.InfractionName, p.Infraction is null, p.UnitAtTime.Code, p.UnitAtTime.Name,
         p.Row.PeriodStart, p.Row.PeriodEnd, p.Row.SuspensionDays, p.Row.DaysUnknown);
 
-    private static HistoryImportPreviewDto ToPreview(DisciplinaryHistoryImportBatch batch, HistoryImportPlan plan, IReadOnlyList<string> fileWarnings) => new(
+    private static HistoryImportPreviewDto ToPreview(DisciplinaryHistoryImportBatch batch, HistoryImportPlan plan, IReadOnlyList<string> fileWarnings, CompanyInfo company) => new(
         batch.Id, batch.FileName, batch.FileSha256, batch.ExpiresAt, Summary(Counts(plan)),
         plan.ToImport.Select(ToDto).ToList(),
         plan.Existing.Select(e => ToDto(e.Planned)).ToList(),
@@ -407,7 +469,11 @@ public sealed class HistoryImportService : IHistoryImportService
         plan.Warnings,
         plan.Rejected,
         plan.Absent.Select(a => new HistoryAbsentDto(a.CaseId, a.CaseNumber, a.EmployeeNumber, a.Date, RecordLabels.Of(a.MeasureType), a.InfractionName, a.ImportedAt)).ToList(),
-        fileWarnings);
+        fileWarnings,
+        company.Code,
+        company.Name,
+        plan.OtherCompanyRows,
+        plan.LooksLikeOtherCompany);
 
     private static string IssuesJson(HistoryImportPlan plan) =>
         JsonSerializer.Serialize(plan.Rejected.Concat(plan.Warnings).Select(i => new { row = i.Row, employeeNumber = i.EmployeeNumber, severity = i.Severity, message = i.Message }));

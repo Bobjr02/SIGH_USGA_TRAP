@@ -37,7 +37,7 @@ public sealed class RecordService : IRecordService
 
     private readonly IApplicationDbContext _db;
     private readonly IDisciplinaryCaseRepository _cases;
-    private readonly IAuthorizedCompanyProvider _company;
+    private readonly ICompanyContext _company;
     private readonly IDateTimeProvider _clock;
     private readonly IRecordNotifier _notifier;
     private readonly IRecordQueries _queries;
@@ -45,7 +45,7 @@ public sealed class RecordService : IRecordService
     public RecordService(
         IApplicationDbContext db,
         IDisciplinaryCaseRepository cases,
-        IAuthorizedCompanyProvider company,
+        ICompanyContext company,
         IDateTimeProvider clock,
         IRecordNotifier notifier,
         IRecordQueries queries)
@@ -61,13 +61,16 @@ public sealed class RecordService : IRecordService
     public async Task<RecordSaveResult> RegisterAsync(Guid registrantUserId, RecordInput input, CancellationToken cancellationToken = default)
     {
         var now = _clock.UtcNow;
-        var (employee, infraction, dates) = await ValidateAsync(input, now, currentRecordId: null, cancellationToken);
+        // A medida nasce na empresa ATIVA (específica), onde o usuário precisa poder registrar.
+        var companyId = await _company.RequireWriteCompanyAsync(cancellationToken);
+        if (!await _company.HasPermissionAsync(companyId, PermissionCodes.DisciplinaryRecords.Register, cancellationToken))
+            throw new SecurityException("Sem permissão para registrar medidas nesta empresa.");
+        var (employee, infraction, dates) = await ValidateAsync(input, now, companyId, currentRecordId: null, cancellationToken);
 
         var duplicates = await FindPossibleDuplicatesAsync(employee.Id, input.MeasureType, dates, currentRecordId: null, cancellationToken);
         if (duplicates.Count > 0 && !input.ConfirmPossibleDuplicate)
             return new RecordSaveResult(null, duplicates);
 
-        var companyId = await _company.GetAuthorizedCompanyIdAsync(null, cancellationToken);
         var record = DisciplinaryCase.Create(
             caseNumber: NewCaseNumber(now),
             companyId: companyId,
@@ -97,10 +100,10 @@ public sealed class RecordService : IRecordService
     public async Task<RecordSaveResult> CorrectAsync(Guid userId, Guid recordId, RecordInput input, CancellationToken cancellationToken = default)
     {
         var now = _clock.UtcNow;
-        var record = await LoadAsync(recordId, cancellationToken);
+        var record = await LoadAsync(recordId, PermissionCodes.DisciplinaryRecords.Register, cancellationToken);
         EnsureRejected(record, "corrigida");
 
-        var (employee, infraction, dates) = await ValidateAsync(input, now, recordId, cancellationToken);
+        var (employee, infraction, dates) = await ValidateAsync(input, now, record.CompanyId, recordId, cancellationToken);
         var duplicates = await FindPossibleDuplicatesAsync(employee.Id, input.MeasureType, dates, recordId, cancellationToken);
         if (duplicates.Count > 0 && !input.ConfirmPossibleDuplicate)
             return new RecordSaveResult(null, duplicates);
@@ -141,7 +144,7 @@ public sealed class RecordService : IRecordService
     public async Task<RecordDetailDto> ApproveAsync(Guid approverUserId, Guid recordId, CancellationToken cancellationToken = default)
     {
         var now = _clock.UtcNow;
-        var record = await LoadAsync(recordId, cancellationToken);
+        var record = await LoadAsync(recordId, PermissionCodes.DisciplinaryRecords.Approve, cancellationToken);
         var decision = EnsurePendingAndReviewable(record, approverUserId);
 
         // Aprovar a decisão (o domínio barra quem a registrou), criar e aplicar a medida e concluir.
@@ -168,7 +171,7 @@ public sealed class RecordService : IRecordService
             throw new BusinessRuleValidationException("O motivo da rejeição é obrigatório.");
 
         var now = _clock.UtcNow;
-        var record = await LoadAsync(recordId, cancellationToken);
+        var record = await LoadAsync(recordId, PermissionCodes.DisciplinaryRecords.Approve, cancellationToken);
         var decision = EnsurePendingAndReviewable(record, approverUserId);
 
         record.RejectDecision(approverUserId, input.Reason, now);
@@ -184,7 +187,7 @@ public sealed class RecordService : IRecordService
         if (string.IsNullOrWhiteSpace(input?.Reason))
             throw new BusinessRuleValidationException("O motivo do cancelamento é obrigatório.");
 
-        var record = await LoadAsync(recordId, cancellationToken);
+        var record = await LoadAsync(recordId, PermissionCodes.DisciplinaryRecords.Register, cancellationToken);
         EnsureRejected(record, "cancelada");
 
         record.Cancel(input.Reason, _clock.UtcNow);
@@ -195,7 +198,7 @@ public sealed class RecordService : IRecordService
     // ---- regras ----
 
     private async Task<(Employee Employee, InfractionType Infraction, IReadOnlyList<DateOnly> Dates)> ValidateAsync(
-        RecordInput input, DateTimeOffset now, Guid? currentRecordId, CancellationToken cancellationToken)
+        RecordInput input, DateTimeOffset now, Guid companyId, Guid? currentRecordId, CancellationToken cancellationToken)
     {
         if (input is null)
             throw new BusinessRuleValidationException("Os dados da medida são obrigatórios.");
@@ -235,12 +238,13 @@ public sealed class RecordService : IRecordService
             throw new BusinessRuleValidationException("Somente a suspensão tem período de início e fim.");
         }
 
-        var employee = await _db.Employees.FirstOrDefaultAsync(e => e.Id == input.EmployeeId, cancellationToken)
+        // Funcionário e motivo têm de ser da MESMA empresa da medida: de outra empresa, "não existem".
+        var employee = await _db.Employees.FirstOrDefaultAsync(e => e.Id == input.EmployeeId && e.CompanyId == companyId, cancellationToken)
                        ?? throw new KeyNotFoundException("Funcionário não encontrado.");
         if (employee.Status == EmployeeStatus.Terminated)
             throw new BusinessRuleValidationException("Funcionário desligado não recebe medida.");
 
-        var infraction = await _db.InfractionTypes.FirstOrDefaultAsync(i => i.Id == input.InfractionTypeId, cancellationToken)
+        var infraction = await _db.InfractionTypes.FirstOrDefaultAsync(i => i.Id == input.InfractionTypeId && i.CompanyId == companyId, cancellationToken)
                          ?? throw new BusinessRuleValidationException("Motivo (tipo de infração) não encontrado.");
         if (!infraction.IsActive)
             throw new BusinessRuleValidationException("O motivo informado está inativo.");
@@ -330,16 +334,29 @@ public sealed class RecordService : IRecordService
 
     private static string NewCaseNumber(DateTimeOffset now) => $"MED-{now.ToOffset(BusinessCalendar.Offset):yyyy}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
 
-    private async Task<DisciplinaryCase> LoadAsync(Guid recordId, CancellationToken cancellationToken)
+    private async Task<DisciplinaryCase> LoadAsync(Guid recordId, string permission, CancellationToken cancellationToken)
     {
         // Escopo: quem não enxerga a medida recebe 404, como na leitura.
         if (await _queries.GetByIdAsync(recordId, cancellationToken) is null)
             throw new KeyNotFoundException("Medida não encontrada.");
 
         var record = await _cases.GetByIdWithDetailsAsync(recordId, cancellationToken);
-        if (record?.Kind == DisciplinaryCaseKind.Historical)
+        if (record is null)
+            throw new KeyNotFoundException("Medida não encontrada.");
+
+        // Permissão avaliada na empresa DA MEDIDA (que precisa ser a empresa ativa); fora disso, 404.
+        try
+        {
+            await _company.EnsureCanWriteAsync(record.CompanyId, permission, cancellationToken);
+        }
+        catch (KeyNotFoundException)
+        {
+            throw new KeyNotFoundException("Medida não encontrada.");
+        }
+
+        if (record.Kind == DisciplinaryCaseKind.Historical)
             throw new BusinessRuleValidationException("Registro histórico importado é somente leitura.");
-        if (record is null || record.Kind != DisciplinaryCaseKind.Record)
+        if (record.Kind != DisciplinaryCaseKind.Record)
             throw new KeyNotFoundException("Medida não encontrada.");
         return record;
     }

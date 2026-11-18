@@ -57,6 +57,8 @@ export interface EmployeeListItem {
   departmentCode?: string | null;
   group?: EmployeeGroup | null;
   team?: string | null;
+  /** Empresa do funcionário (coluna Empresa no modo "Todas"). */
+  companyName?: string | null;
 }
 
 export interface EmployeeDetail extends EmployeeListItem {
@@ -65,7 +67,6 @@ export interface EmployeeDetail extends EmployeeListItem {
   jobTitleCode?: string | null;
   terminationDate?: string | null;
   terminationReason?: string | null;
-  companyName?: string | null;
 }
 
 export interface OrganizationOption {
@@ -166,6 +167,13 @@ export interface ImportPreview {
   absenceTerminationPercent: number;
   maxTerminationPercent: number;
   requiresMassTerminationConfirmation: boolean;
+  /** Empresa para a qual o arquivo está indo. */
+  companyCode?: string;
+  companyName?: string;
+  /** Linhas rejeitadas por Chave Organização de outra empresa. */
+  otherCompanyRows?: number;
+  /** Mais da metade das linhas é de outra empresa (alerta grande; confirmação bloqueada). */
+  looksLikeOtherCompany?: boolean;
 }
 
 export interface ImportResult {

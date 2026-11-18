@@ -28,6 +28,7 @@ public sealed class SecurityAuditLogger : ISecurityAuditLogger
     {
         _context.AuditLogs.Add(new AuditLog
         {
+            CompanyId = _context.ActiveCompanyId,
             Action = action,
             Entity = entityName ?? nameof(User),
             EntityId = entityId ?? userId?.ToString(),

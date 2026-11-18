@@ -79,7 +79,7 @@ public static class SqlServerTestDatabase
     }
 
     /// <summary>
-    /// Apaga os dados de teste. Empresas criadas pelos testes são removidas; a empresa padrão fica.
+    /// Apaga os dados de teste. Empresas criadas pelos testes são removidas; as do seed (USGA e Trapiche) ficam.
     /// </summary>
     public static async Task ResetAsync()
     {
@@ -98,8 +98,9 @@ public static class SqlServerTestDatabase
         await _respawner.ResetAsync(connection);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM [dbo].[Companies] WHERE [Id] <> @defaultCompanyId";
+        command.CommandText = "DELETE FROM [dbo].[Companies] WHERE [Id] NOT IN (@defaultCompanyId, @trapicheId)";
         command.Parameters.AddWithValue("@defaultCompanyId", DatabaseSeeder.DefaultCompanyId);
+        command.Parameters.AddWithValue("@trapicheId", DatabaseSeeder.TrapicheCompanyId);
         await command.ExecuteNonQueryAsync();
     }
 }

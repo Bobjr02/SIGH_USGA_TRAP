@@ -45,15 +45,9 @@ public class JwtTokenGenerator : IJwtTokenGenerator
             claims.Add(new Claim(SighClaimTypes.PasswordChangeRequired, "true"));
         }
 
-        foreach (var role in roles)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, role));
-        }
-
-        foreach (var permission in permissions)
-        {
-            claims.Add(new Claim("permission", permission));
-        }
+        // Perfis e permissões são POR EMPRESA e lidos do banco a cada requisição (ICompanyContext): nada disso vai
+        // no token, que não pode ser a fonte de autorização (a empresa ativa muda sem novo token). Qualquer mudança
+        // de perfil, em qualquer empresa, troca o SecurityStamp e derruba o token.
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

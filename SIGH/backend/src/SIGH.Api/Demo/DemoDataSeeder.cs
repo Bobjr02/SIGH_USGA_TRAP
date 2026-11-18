@@ -4,7 +4,6 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SIGH.Application.Authentication.ChangePassword;
-using SIGH.Application.Authentication.Common;
 using SIGH.Application.Common.Authorization;
 using SIGH.Application.Disciplinary.DisciplinaryCases.AddEvidence;
 using SIGH.Application.Disciplinary.Evidences;
@@ -12,6 +11,7 @@ using SIGH.Application.Disciplinary.InfractionTypes.CreateInfractionType;
 using SIGH.Application.Disciplinary.Records;
 using SIGH.Application.Employees.Import;
 using SIGH.Application.Interfaces;
+using SIGH.Application.Users.Access;
 using SIGH.Application.Users.CreateUser;
 using SIGH.Domain.Disciplinary.Enums;
 using SIGH.Domain.Repositories;
@@ -30,23 +30,53 @@ public sealed class DemoDataSeeder
 {
     public const string Domain = "demo.local";
 
-    public sealed record DemoUser(string Login, string FullName, string Cpf, string[] Roles, string[] Units);
+    /// <param name="Company">Empresa em que a conta é criada e os perfis valem (USGA ou TRAP).</param>
+    /// <param name="AlsoIn">Outras empresas em que a MESMA conta recebe os mesmos perfis (vínculo de usuário existente).</param>
+    public sealed record DemoUser(string Login, string FullName, string Cpf, string[] Roles, string[] Units,
+        string Company = CompanyDefaults.UsgaCode, string[]? AlsoIn = null);
 
-    /// <summary>Usuários de demonstração (e-mail = login@demo.local). CPFs sintéticos válidos.</summary>
+    /// <summary>
+    /// Usuários de demonstração (e-mail = login@demo.local). CPFs sintéticos válidos. Os antigos (auxiliar, encarregado,
+    /// gestor.industrial, gestor.agricola, preposto) continuam apontando para a USGA; os novos são um conjunto por empresa;
+    /// o "juridico" tem o perfil Jurídico nas duas empresas.
+    /// </summary>
     public static readonly IReadOnlyList<DemoUser> Users =
     [
         new("auxiliar", "AUXILIAR DE ESCRITORIO DEMO TESTE", SyntheticCpf("900000001"), [SystemRoles.HrRegistrar], []),
         new("encarregado", "ENCARREGADO DO RH DEMO TESTE", SyntheticCpf("900000002"), [SystemRoles.HrApprover], []),
-        new("juridico", "ADVOGADA DO JURIDICO DEMO TESTE", SyntheticCpf("900000003"), [SystemRoles.Legal], []),
+        new("juridico", "ADVOGADA DO JURIDICO DEMO TESTE", SyntheticCpf("900000003"), [SystemRoles.Legal], [], AlsoIn: [CompanyDefaults.TrapicheCode]),
         new("gestor.industrial", "GESTOR DA INDUSTRIAL DEMO TESTE", SyntheticCpf("900000004"), [SystemRoles.Manager], ["USGA131"]),
         new("gestor.agricola", "GESTOR AGRICOLA DEMO TESTE", SyntheticCpf("900000005"), [SystemRoles.Manager], ["USGA137", "USGA141"]),
         new("preposto", "PREPOSTO DO RH DEMO TESTE", SyntheticCpf("900000006"), [SystemRoles.HrRegistrar, SystemRoles.HrApprover], []),
+        // Por empresa: USGA.
+        new("admin.usga", "ADMINISTRADOR DA USGA DEMO TESTE", SyntheticCpf("900000007"), [SystemRoles.Administrator], []),
+        new("auxiliar.usga", "AUXILIAR DA USGA DEMO TESTE", SyntheticCpf("900000008"), [SystemRoles.HrRegistrar], []),
+        new("encarregado.usga", "ENCARREGADO DA USGA DEMO TESTE", SyntheticCpf("900000009"), [SystemRoles.HrApprover], []),
+        new("gestor.usga131", "GESTOR DA USGA131 DEMO TESTE", SyntheticCpf("900000010"), [SystemRoles.Manager], ["USGA131"]),
+        // Por empresa: Trapiche (o admin.trap é o primeiro administrador da Trapiche na demonstração).
+        new("auxiliar.trap", "AUXILIAR DA TRAPICHE DEMO TESTE", SyntheticCpf("900000012"), [SystemRoles.HrRegistrar], [], CompanyDefaults.TrapicheCode),
+        new("encarregado.trap", "ENCARREGADO DA TRAPICHE DEMO TESTE", SyntheticCpf("900000013"), [SystemRoles.HrApprover], [], CompanyDefaults.TrapicheCode),
+        new("gestor.trap131", "GESTOR DA TRAP131 DEMO TESTE", SyntheticCpf("900000014"), [SystemRoles.Manager], ["TRAP131"], CompanyDefaults.TrapicheCode),
     ];
+
+    /// <summary>Primeiro administrador da Trapiche na demonstração (na instalação real vem de Seed:Companies:TRAP:AdminEmail).</summary>
+    public const string TrapicheAdminLogin = "admin.trap";
+    private static readonly string TrapicheAdminCpf = SyntheticCpf("900000011");
 
     private enum Outcome { Approved, Pending, Rejected, Cancelled }
 
     private sealed record DemoRecord(int Number, string EmployeeNumber, DisciplinaryMeasureType Type, string Infraction, int DaysAgo, Outcome Outcome,
         int SuspensionDays = 0, bool WithAttachment = false);
+
+    /// <summary>Medidas fictícias da Trapiche em vários estados (registradas pelo auxiliar.trap, revistas pelo encarregado.trap).</summary>
+    private static readonly DemoRecord[] TrapicheRecords =
+    [
+        new(1, "70090001", DisciplinaryMeasureType.WrittenWarning, "FALTA_INJUSTIFICADA", 14, Outcome.Approved, WithAttachment: true), // TRAP131
+        new(2, "70090003", DisciplinaryMeasureType.Suspension, "EPI", 10, Outcome.Approved, SuspensionDays: 1),                      // TRAP131
+        new(3, "70090007", DisciplinaryMeasureType.VerbalWarning, "ATRASO", 5, Outcome.Pending),                                      // TRAP132
+        new(4, "70090009", DisciplinaryMeasureType.WrittenWarning, "EPI", 7, Outcome.Rejected),                                       // TRAP132
+        new(5, "70090011", DisciplinaryMeasureType.VerbalWarning, "ATRASO", 8, Outcome.Cancelled),                                    // TRAP132
+    ];
 
     /// <summary>3 aprovadas, 1 suspensão aprovada, 2 pendentes, 1 rejeitada aguardando correção e 1 cancelada.</summary>
     private static readonly DemoRecord[] Records =
@@ -97,13 +127,30 @@ public sealed class DemoDataSeeder
             var adminEmail = _configuration["Seed:AdminEmail"]?.Trim().ToLowerInvariant();
             var adminId = await UserIdAsync(adminEmail, cancellationToken)
                           ?? throw new InvalidOperationException("Dados de demonstração exigem o administrador do seed (Seed:AdminEmail e Seed:AdminPassword).");
+            const string usga = CompanyDefaults.UsgaCode;
+            const string trap = CompanyDefaults.TrapicheCode;
 
-            await ImportEmployeesAsync(adminId, cancellationToken);
-            var infractions = await EnsureInfractionTypesAsync(adminId, cancellationToken);
-            await ImportHistoryAsync(adminId, cancellationToken);
-            var users = await EnsureUsersAsync(adminId, cancellationToken);
-            await EnsureRecordsAsync(users, infractions, cancellationToken);
-            _logger.LogInformation("Demo: dados de demonstração prontos ({Users} usuários, {Records} medidas).", users.Count, Records.Length);
+            // USGA: os arquivos fictícios do pacote de referência.
+            var usgaEmployees = await File.ReadAllBytesAsync(Path.Combine(DataPath(), "importacao-funcionarios", "funcionarios_carga_inicial.xlsx"), cancellationToken);
+            await ImportEmployeesAsync(adminId, usga, usgaEmployees, "funcionarios_carga_inicial.xlsx", cancellationToken);
+            var infractions = new Dictionary<string, Dictionary<string, Guid>>
+            {
+                [usga] = await EnsureInfractionTypesAsync(adminId, usga, cancellationToken)
+            };
+            var usgaHistory = await File.ReadAllBytesAsync(Path.Combine(DataPath(), "historico-disciplinar", "base_disciplinar_ficticia.xlsx"), cancellationToken);
+            await ImportHistoryAsync(adminId, usga, usgaHistory, "base_disciplinar_ficticia.xlsx", cancellationToken);
+
+            // Trapiche: planilhas FICTÍCIAS geradas por código (TRAP131/TRAP132, nomes TESTE).
+            var trapAdminId = await EnsureTrapicheAdminAsync(cancellationToken);
+            await ImportEmployeesAsync(trapAdminId, trap, TrapicheDemoSpreadsheets.EmployeesXlsx(), "funcionarios_trapiche_ficticio.xlsx", cancellationToken);
+            infractions[trap] = await EnsureInfractionTypesAsync(trapAdminId, trap, cancellationToken);
+            await ImportHistoryAsync(trapAdminId, trap, TrapicheDemoSpreadsheets.HistoryXlsx(), "penalidades_trapiche_ficticio.xlsx", cancellationToken);
+
+            var admins = new Dictionary<string, Guid> { [usga] = adminId, [trap] = trapAdminId };
+            var users = await EnsureUsersAsync(admins, cancellationToken);
+            await EnsureRecordsAsync(usga, "DEMO", Records, users["auxiliar"], users["encarregado"], infractions[usga], cancellationToken);
+            await EnsureRecordsAsync(trap, "DEMO-TRAP", TrapicheRecords, users["auxiliar.trap"], users["encarregado.trap"], infractions[trap], cancellationToken);
+            _logger.LogInformation("Demo: dados de demonstração prontos ({Users} usuários, {Records} medidas).", users.Count, Records.Length + TrapicheRecords.Length);
         }
         catch (Exception ex)
         {
@@ -112,75 +159,76 @@ public sealed class DemoDataSeeder
         }
     }
 
-    // ---- a. funcionários (importador do SAP) ----
+    private static Guid CompanyIdOf(string code) => code == CompanyDefaults.TrapicheCode ? CompanyDefaults.TrapicheId : CompanyDefaults.UsgaId;
 
-    private async Task ImportEmployeesAsync(Guid adminId, CancellationToken ct)
+    // ---- a. funcionários (importador do SAP), para a empresa ativa ----
+
+    private async Task ImportEmployeesAsync(Guid adminId, string company, byte[] bytes, string fileName, CancellationToken ct)
     {
-        await RunAsAsync(adminId, async sp =>
+        await RunAsAsync(adminId, company, async sp =>
         {
+            var companyId = CompanyIdOf(company);
             var db = sp.GetRequiredService<SighDbContext>();
-            if (await db.Employees.AnyAsync(ct))
+            if (await db.Employees.AnyAsync(e => e.CompanyId == companyId, ct))
             {
-                _logger.LogInformation("Demo: funcionários já importados.");
+                _logger.LogInformation("Demo: funcionários da {Company} já importados.", company);
                 return;
             }
 
-            var path = Path.Combine(DataPath(), "importacao-funcionarios", "funcionarios_carga_inicial.xlsx");
-            var bytes = await File.ReadAllBytesAsync(path, ct);
             var import = sp.GetRequiredService<IEmployeeImportService>();
-            var preview = await import.PreviewAsync(new MemoryStream(bytes), Path.GetFileName(path), adminId, ct);
-            if (!preview.Success) throw new InvalidOperationException($"Pré-visualização da carga de funcionários falhou: {preview.Message}");
+            var preview = await import.PreviewAsync(new MemoryStream(bytes), fileName, adminId, ct);
+            if (!preview.Success) throw new InvalidOperationException($"Pré-visualização da carga de funcionários ({company}) falhou: {preview.Message}");
             var confirm = await import.ConfirmAsync(preview.Data!.BatchId, new MemoryStream(bytes), false, adminId, ct);
-            if (!confirm.Success) throw new InvalidOperationException($"Confirmação da carga de funcionários falhou: {confirm.Message}");
-            _logger.LogInformation("Demo: {Count} funcionários fictícios importados.", confirm.Data!.Summary.Created);
+            if (!confirm.Success) throw new InvalidOperationException($"Confirmação da carga de funcionários ({company}) falhou: {confirm.Message}");
+            _logger.LogInformation("Demo: {Count} funcionários fictícios importados na {Company}.", confirm.Data!.Summary.Created, company);
         });
     }
 
     // ---- b. histórico disciplinar fictício (importador do histórico) ----
 
-    private async Task ImportHistoryAsync(Guid adminId, CancellationToken ct)
+    private async Task ImportHistoryAsync(Guid adminId, string company, byte[] bytes, string fileName, CancellationToken ct)
     {
-        await RunAsAsync(adminId, async sp =>
+        await RunAsAsync(adminId, company, async sp =>
         {
+            var companyId = CompanyIdOf(company);
             var db = sp.GetRequiredService<SighDbContext>();
-            if (await db.DisciplinaryCases.AnyAsync(c => c.Kind == DisciplinaryCaseKind.Historical, ct))
+            if (await db.DisciplinaryCases.AnyAsync(c => c.Kind == DisciplinaryCaseKind.Historical && c.CompanyId == companyId, ct))
             {
-                _logger.LogInformation("Demo: histórico disciplinar já importado.");
+                _logger.LogInformation("Demo: histórico disciplinar da {Company} já importado.", company);
                 return;
             }
 
             var import = sp.GetRequiredService<SIGH.Application.Disciplinary.History.IHistoryImportService>();
             if ((await import.GetStatusAsync(ct)).IsClosed)
             {
-                _logger.LogInformation("Demo: importação de histórico encerrada; etapa pulada.");
+                _logger.LogInformation("Demo: importação de histórico da {Company} encerrada; etapa pulada.", company);
                 return;
             }
 
-            var path = Path.Combine(DataPath(), "historico-disciplinar", "base_disciplinar_ficticia.xlsx");
-            var bytes = await File.ReadAllBytesAsync(path, ct);
-            var preview = await import.PreviewAsync(new MemoryStream(bytes), Path.GetFileName(path), adminId, ct);
-            if (!preview.Success) throw new InvalidOperationException($"Pré-visualização do histórico falhou: {preview.Message}");
+            var preview = await import.PreviewAsync(new MemoryStream(bytes), fileName, adminId, ct);
+            if (!preview.Success) throw new InvalidOperationException($"Pré-visualização do histórico ({company}) falhou: {preview.Message}");
             var confirm = await import.ConfirmAsync(preview.Data!.BatchId, new MemoryStream(bytes), adminId, ct);
-            if (!confirm.Success) throw new InvalidOperationException($"Confirmação do histórico falhou: {confirm.Message}");
-            _logger.LogInformation("Demo: {Count} registros históricos fictícios importados.", confirm.Data!.Imported);
+            if (!confirm.Success) throw new InvalidOperationException($"Confirmação do histórico ({company}) falhou: {confirm.Message}");
+            _logger.LogInformation("Demo: {Count} registros históricos fictícios importados na {Company}.", confirm.Data!.Imported, company);
         });
     }
 
-    // ---- motivos ----
+    // ---- motivos (cada empresa tem o próprio catálogo) ----
 
-    private async Task<Dictionary<string, Guid>> EnsureInfractionTypesAsync(Guid adminId, CancellationToken ct)
+    private async Task<Dictionary<string, Guid>> EnsureInfractionTypesAsync(Guid adminId, string company, CancellationToken ct)
     {
         var result = new Dictionary<string, Guid>();
-        await RunAsAsync(adminId, async sp =>
+        await RunAsAsync(adminId, company, async sp =>
         {
+            var companyId = CompanyIdOf(company);
             var db = sp.GetRequiredService<SighDbContext>();
             foreach (var (code, name, severity) in InfractionTypes)
             {
-                var id = await db.InfractionTypes.Where(i => i.Code == code).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
+                var id = await db.InfractionTypes.Where(i => i.Code == code && i.CompanyId == companyId).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
                 if (id is null)
                 {
                     var created = await sp.GetRequiredService<ICreateInfractionTypeUseCase>().ExecuteAsync(new CreateInfractionTypeRequest(code, name, severity), ct);
-                    if (!created.Success) throw new InvalidOperationException($"Motivo {code}: {created.Message}");
+                    if (!created.Success) throw new InvalidOperationException($"Motivo {code} ({company}): {created.Message}");
                     id = created.Data!.Id;
                 }
                 result[code] = id.Value;
@@ -191,62 +239,110 @@ public sealed class DemoDataSeeder
 
     // ---- c. usuários (criação real + troca de senha real: sem troca obrigatória depois) ----
 
-    private async Task<Dictionary<string, Guid>> EnsureUsersAsync(Guid adminId, CancellationToken ct)
+    /// <summary>
+    /// Primeiro administrador da Trapiche na demonstração, criado como o seed cria o de cada empresa
+    /// (Seed:Companies:&lt;código&gt;:AdminEmail), mas já com a senha de demonstração.
+    /// </summary>
+    private async Task<Guid> EnsureTrapicheAdminAsync(CancellationToken ct)
     {
-        var ids = new Dictionary<string, Guid>();
+        var email = EmailOf(TrapicheAdminLogin);
+        if (await UserIdAsync(email, ct) is { } existing)
+            return existing;
+
+        await using var scope = _scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
+        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var adminRole = await db.Roles.SingleAsync(r => r.Name == SystemRoles.Administrator, ct);
+        var hash = hasher.HashPassword(_options.DemoPassword!);
+        var admin = new SIGH.Domain.Entities.User
+        {
+            FullName = "ADMINISTRADOR DA TRAPICHE DEMO TESTE",
+            Email = email,
+            Cpf = TrapicheAdminCpf,
+            PasswordHash = hash,
+            Status = SIGH.Domain.Enums.UserStatus.Active,
+            MustChangePassword = false,
+            CreatedInCompanyId = CompanyDefaults.TrapicheId
+        };
+        admin.UserRoles.Add(new SIGH.Domain.Entities.UserRole { UserId = admin.Id, RoleId = adminRole.Id, CompanyId = CompanyDefaults.TrapicheId });
+        admin.PasswordHistories.Add(new SIGH.Domain.Entities.PasswordHistory { UserId = admin.Id, PasswordHash = hash });
+        db.Users.Add(admin);
+        await db.SaveChangesAsync(ct);
+        _logger.LogInformation("Demo: administrador {Email} da Trapiche criado.", email);
+        return admin.Id;
+    }
+
+    private async Task<Dictionary<string, Guid>> EnsureUsersAsync(IReadOnlyDictionary<string, Guid> admins, CancellationToken ct)
+    {
+        var ids = new Dictionary<string, Guid> { [TrapicheAdminLogin] = admins[CompanyDefaults.TrapicheCode] };
         foreach (var user in Users)
         {
             var email = EmailOf(user.Login);
-            if (await UserIdAsync(email, ct) is { } existing)
+            var adminId = admins[user.Company];
+            var id = await UserIdAsync(email, ct) ?? Guid.Empty;
+            if (id == Guid.Empty)
             {
-                ids[user.Login] = existing;
-                continue;
+                var initialPassword = RandomPassword();
+                await RunAsAsync(adminId, user.Company, async sp =>
+                {
+                    var db = sp.GetRequiredService<SighDbContext>();
+                    var companyId = CompanyIdOf(user.Company);
+                    var roles = await db.Roles.Where(r => user.Roles.Contains(r.Name)).Select(r => r.Id).ToListAsync(ct);
+                    var units = await db.ManagementUnits.Where(m => m.CompanyId == companyId && user.Units.Contains(m.Code!)).Select(m => m.Id).ToListAsync(ct);
+                    var created = await sp.GetRequiredService<ICreateUserService>()
+                        .CreateUserAsync(new CreateUserRequest(user.FullName, email, user.Cpf, initialPassword, roles, units), ct);
+                    id = created.Id;
+                });
+
+                // O próprio usuário "faz o primeiro acesso": troca a senha inicial pela senha de demonstração.
+                await RunAsAsync(id, user.Company, async sp =>
+                    await sp.GetRequiredService<IChangePasswordService>().ChangePasswordAsync(new ChangePasswordRequest(id, initialPassword, _options.DemoPassword!), ct));
+                _logger.LogInformation("Demo: usuário {Email} criado na {Company}.", email, user.Company);
             }
 
-            var initialPassword = RandomPassword();
-            Guid id = Guid.Empty;
-            await RunAsAsync(adminId, async sp =>
+            // A mesma conta em outra empresa: vínculo pelo administrador dela (sem criar outra conta).
+            foreach (var other in user.AlsoIn ?? [])
             {
-                var db = sp.GetRequiredService<SighDbContext>();
-                var roles = await db.Roles.Where(r => user.Roles.Contains(r.Name)).Select(r => r.Id).ToListAsync(ct);
-                var units = await db.ManagementUnits.Where(m => user.Units.Contains(m.Code!)).Select(m => m.Id).ToListAsync(ct);
-                var created = await sp.GetRequiredService<ICreateUserService>()
-                    .CreateUserAsync(new CreateUserRequest(user.FullName, email, user.Cpf, initialPassword, roles, units), ct);
-                id = created.Id;
-            });
-
-            // O próprio usuário "faz o primeiro acesso": troca a senha inicial pela senha de demonstração.
-            await RunAsAsync(id, async sp =>
-                await sp.GetRequiredService<IChangePasswordService>().ChangePasswordAsync(new ChangePasswordRequest(id, initialPassword, _options.DemoPassword!), ct));
+                var otherId = CompanyIdOf(other);
+                await RunAsAsync(admins[other], other, async sp =>
+                {
+                    var db = sp.GetRequiredService<SighDbContext>();
+                    if (await db.UserRoles.AnyAsync(ur => ur.UserId == id && ur.CompanyId == otherId, ct))
+                        return;
+                    var roles = await db.Roles.Where(r => user.Roles.Contains(r.Name)).Select(r => r.Id).ToListAsync(ct);
+                    await sp.GetRequiredService<IUserAccessAdministrationService>()
+                        .LinkExistingUserAsync(admins[other], new LinkExistingUserRequest(email, roles), ct);
+                    _logger.LogInformation("Demo: usuário {Email} vinculado à {Company}.", email, other);
+                });
+            }
 
             ids[user.Login] = id;
-            _logger.LogInformation("Demo: usuário {Email} criado.", email);
         }
         return ids;
     }
 
     // ---- d. medidas em todos os estados ----
 
-    private async Task EnsureRecordsAsync(Dictionary<string, Guid> users, Dictionary<string, Guid> infractions, CancellationToken ct)
+    private async Task EnsureRecordsAsync(string company, string tagPrefix, IReadOnlyList<DemoRecord> records, Guid registrar, Guid approver,
+        IReadOnlyDictionary<string, Guid> infractions, CancellationToken ct)
     {
-        var registrar = users["auxiliar"];
-        var approver = users["encarregado"];
         var today = BusinessCalendar.Today(_clock.UtcNow);
+        var companyId = CompanyIdOf(company);
 
-        foreach (var demo in Records)
+        foreach (var demo in records)
         {
-            var tag = $"[DEMO-{demo.Number}]";
+            var tag = $"[{tagPrefix}-{demo.Number}]";
             Guid? existing = null;
-            await RunAsAsync(registrar, async sp =>
+            await RunAsAsync(registrar, company, async sp =>
                 existing = await sp.GetRequiredService<SighDbContext>().DisciplinaryCases
-                    .Where(c => c.Kind == DisciplinaryCaseKind.Record && c.Description.Contains(tag)).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct));
+                    .Where(c => c.Kind == DisciplinaryCaseKind.Record && c.CompanyId == companyId && c.Description.Contains(tag)).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct));
             if (existing is not null)
                 continue;
 
             var occurrence = today.AddDays(-demo.DaysAgo);
             var measureDate = occurrence.AddDays(1);
             var input = new RecordInput(
-                await EmployeeIdAsync(demo.EmployeeNumber, ct),
+                await EmployeeIdAsync(companyId, demo.EmployeeNumber, ct),
                 infractions[demo.Infraction],
                 demo.Type,
                 [occurrence],
@@ -257,25 +353,25 @@ public sealed class DemoDataSeeder
                 ConfirmPossibleDuplicate: true);
 
             Guid recordId = Guid.Empty;
-            await RunAsAsync(registrar, async sp =>
+            await RunAsAsync(registrar, company, async sp =>
                 recordId = (await sp.GetRequiredService<IRecordService>().RegisterAsync(registrar, input, ct)).Record!.Summary.Id);
 
             if (demo.WithAttachment)
-                await AttachLetterAsync(registrar, recordId, ct);
+                await AttachLetterAsync(registrar, company, recordId, ct);
 
             switch (demo.Outcome)
             {
                 case Outcome.Approved:
-                    await RunAsAsync(approver, sp => sp.GetRequiredService<IRecordService>().ApproveAsync(approver, recordId, ct));
+                    await RunAsAsync(approver, company, sp => sp.GetRequiredService<IRecordService>().ApproveAsync(approver, recordId, ct));
                     break;
                 case Outcome.Rejected:
-                    await RunAsAsync(approver, sp => sp.GetRequiredService<IRecordService>().RejectAsync(approver, recordId,
+                    await RunAsAsync(approver, company, sp => sp.GetRequiredService<IRecordService>().RejectAsync(approver, recordId,
                         new ReasonInput("Data da ocorrência não confere com o cartão de ponto (demonstração)."), ct));
                     break;
                 case Outcome.Cancelled:
-                    await RunAsAsync(approver, sp => sp.GetRequiredService<IRecordService>().RejectAsync(approver, recordId,
+                    await RunAsAsync(approver, company, sp => sp.GetRequiredService<IRecordService>().RejectAsync(approver, recordId,
                         new ReasonInput("Registrada para o funcionário errado (demonstração)."), ct));
-                    await RunAsAsync(registrar, sp => sp.GetRequiredService<IRecordService>().CancelAsync(registrar, recordId,
+                    await RunAsAsync(registrar, company, sp => sp.GetRequiredService<IRecordService>().CancelAsync(registrar, recordId,
                         new ReasonInput("Cancelada pelo registrante após a rejeição (demonstração)."), ct));
                     break;
             }
@@ -284,8 +380,8 @@ public sealed class DemoDataSeeder
     }
 
     /// <summary>Carta assinada fictícia: um PDF gerado na hora, anexado pelos serviços de evidência.</summary>
-    private Task AttachLetterAsync(Guid registrar, Guid recordId, CancellationToken ct) =>
-        RunAsAsync(registrar, async sp =>
+    private Task AttachLetterAsync(Guid registrar, string company, Guid recordId, CancellationToken ct) =>
+        RunAsAsync(registrar, company, async sp =>
         {
             var evidence = await sp.GetRequiredService<IAddEvidenceUseCase>().ExecuteAsync(
                 new AddEvidenceRequest(recordId, EvidenceType.Document, "Carta assinada (fictícia)", registrar, _clock.UtcNow,
@@ -305,30 +401,31 @@ public sealed class DemoDataSeeder
         _ => "faltou ao turno sem justificativa."
     };
 
-    // ---- execução "como" um usuário (serviços reais com as permissões efetivas dele) ----
+    // ---- execução "como" um usuário, numa empresa (serviços reais com as permissões efetivas dele nela) ----
 
     /// <summary>
-    /// Cria um escopo com um HttpContext cujo usuário é <paramref name="userId"/>, com as claims de permissão
-    /// calculadas como no login (perfis vigentes). CurrentUserService, escopo e auditoria funcionam como
-    /// numa requisição desse usuário.
+    /// Cria um escopo com um HttpContext cujo usuário é <paramref name="userId"/> e cuja empresa ativa (cabeçalho
+    /// X-SIGH-Company) é <paramref name="company"/>. CurrentUserService, contexto de empresa, escopo e auditoria
+    /// funcionam como numa requisição desse usuário: as permissões vêm do banco, por empresa.
     /// </summary>
-    private async Task RunAsAsync(Guid userId, Func<IServiceProvider, Task> action)
+    private async Task RunAsAsync(Guid userId, string company, Func<IServiceProvider, Task> action)
     {
         await using var scope = _scopes.CreateAsyncScope();
         var sp = scope.ServiceProvider;
-        var user = await sp.GetRequiredService<IUserRepository>().GetByIdWithRolesAndPermissionsAsync(userId)
+        var user = await sp.GetRequiredService<IUserRepository>().GetByIdAsync(userId)
                    ?? throw new InvalidOperationException($"Usuário {userId} não encontrado.");
 
         var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, user.Id.ToString()), new(ClaimTypes.Email, user.Email), new(ClaimTypes.Name, user.FullName) };
-        claims.AddRange(user.GetActivePermissionCodes(_clock.UtcNow).Select(p => new Claim("permission", p)));
 
         var accessor = sp.GetRequiredService<IHttpContextAccessor>();
         var previous = accessor.HttpContext;
-        accessor.HttpContext = new DefaultHttpContext
+        var context = new DefaultHttpContext
         {
             RequestServices = sp,
             User = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "DemoSeed")),
         };
+        context.Request.Headers[ICompanyContext.HeaderName] = company;
+        accessor.HttpContext = context;
         try
         {
             await action(sp);
@@ -347,11 +444,11 @@ public sealed class DemoDataSeeder
             .Where(u => u.Email == email).Select(u => (Guid?)u.Id).FirstOrDefaultAsync(ct);
     }
 
-    private async Task<Guid> EmployeeIdAsync(string employeeNumber, CancellationToken ct)
+    private async Task<Guid> EmployeeIdAsync(Guid companyId, string employeeNumber, CancellationToken ct)
     {
         await using var scope = _scopes.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<SighDbContext>().Employees
-            .Where(e => e.EmployeeNumber == employeeNumber).Select(e => e.Id).SingleAsync(ct);
+            .Where(e => e.CompanyId == companyId && e.EmployeeNumber == employeeNumber).Select(e => e.Id).SingleAsync(ct);
     }
 
     private string DataPath() =>

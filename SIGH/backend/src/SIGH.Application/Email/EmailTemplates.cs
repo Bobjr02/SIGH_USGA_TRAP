@@ -108,18 +108,23 @@ public static class EmailTemplates
     }
 
     /// <summary>Aviso de medida disciplinar (registrada, aprovada, rejeitada, pendente). Sem dados do funcionário.</summary>
-    public static EmailContent RecordNotice(string fullName, string title, string message, string link)
+    /// <summary>Aviso de medida. Cita a empresa (sem nome nem CPF do funcionário).</summary>
+    public static EmailContent RecordNotice(string fullName, string title, string message, string link, string? companyName = null)
     {
-        var subject = $"{title} - SIGH";
+        var subject = string.IsNullOrWhiteSpace(companyName) ? $"{title} - SIGH" : $"{title} - {companyName} - SIGH";
         var text = new StringBuilder()
             .AppendLine($"Olá, {fullName}.")
-            .AppendLine()
+            .AppendLine();
+        if (!string.IsNullOrWhiteSpace(companyName))
+            text.AppendLine($"Empresa: {companyName}");
+        text
             .AppendLine(message)
             .AppendLine()
             .AppendLine($"Abra no SIGH: {link}");
 
         var html = Layout(subject,
             $"<p>Olá, {E(fullName)}.</p>" +
+            (string.IsNullOrWhiteSpace(companyName) ? string.Empty : $"<p>Empresa: <strong>{E(companyName)}</strong></p>") +
             $"<p>{E(message)}</p>" +
             Button(link, "Abrir no SIGH") +
             LinkFallback(link));

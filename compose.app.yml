@@ -71,6 +71,9 @@ services:
       Seed__AdminEmail: ${SIGH_ADMIN_EMAIL:-admin@demo.local}
       Seed__AdminPassword: ${SIGH_ADMIN_PASSWORD:?Rode scripts/local-up para gerar o .env.local}
       Seed__DefaultCompanyName: "Usina Serra Grande S.A. (DEMONSTRAÇÃO)"
+      # Primeiro administrador da Trapiche (opcional; na demonstração o admin.trap@demo.local é criado pelo seed de demonstração).
+      Seed__Companies__TRAP__AdminEmail: ${SIGH_TRAP_ADMIN_EMAIL:-}
+      Seed__Companies__TRAP__AdminPassword: ${SIGH_TRAP_ADMIN_PASSWORD:-}
       Seed__DemoData: "true"
       Seed__DemoPassword: ${SIGH_DEMO_PASSWORD:?Rode scripts/local-up para gerar o .env.local}
       Seed__DemoDataPath: /demo-data
@@ -83,8 +86,8 @@ services:
       App__PublicBaseUrl: http://localhost:${SIGH_WEB_PORT:-8080}
       # O web (nginx) é o único cliente: IP real e esquema vêm do X-Forwarded-*.
       ReverseProxy__Enabled: "true"
-      # Seis usuários de demonstração entram do mesmo computador: o limite de produção (10/min) é apertado.
-      RateLimits__Login__PermitLimit: "30"
+      # Catorze usuários de demonstração entram do mesmo computador: o limite de produção (10/min) é apertado.
+      RateLimits__Login__PermitLimit: "60"
     volumes:
       - evidences:/var/lib/sigh/evidences
       # Arquivos FICTÍCIOS do pacote de referência (funcionários), só leitura.

@@ -35,6 +35,8 @@ public class AuditLogConfiguration : AuditableEntityConfiguration<AuditLog>
         builder.HasIndex(al => new { al.Entity, al.EntityId });
         builder.HasIndex(al => al.CreatedAt);
         builder.HasIndex(al => al.UserId);
+        // Sem FK: a trilha é só inserção e não pode travar por causa de uma empresa.
+        builder.HasIndex(al => new { al.CompanyId, al.CreatedAt });
 
         builder.HasOne(al => al.User)
             .WithMany()

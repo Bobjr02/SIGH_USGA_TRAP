@@ -20,10 +20,15 @@ public sealed class AuditLogQueryService : IAuditLogQueryService
     {
         var query = _context.AuditLogs.AsNoTracking();
 
-        // A trilha geral mistura dados de todas as gerências: só quem tem escopo total a consulta.
-        // (Com escopo parcial a lista vem vazia; a trilha de UM processo usa o escopo do processo.)
-        if (_scope is not null && !_scope.HasFullAccess)
-            query = query.Where(_ => false);
+        // A trilha geral mistura dados de todas as gerências: só as empresas em que o usuário tem escopo total
+        // (e Audit.View, exigida pela rota). Eventos sem empresa (login, por exemplo) só para quem tem escopo
+        // total em TODAS as empresas ativas. A trilha de UM processo usa o escopo do processo.
+        if (_scope is not null)
+        {
+            var (companies, includeWithoutCompany) = await VisibleCompaniesAsync(cancellationToken);
+            query = query.Where(a => (a.CompanyId != null && companies.Contains(a.CompanyId.Value))
+                                     || (includeWithoutCompany && a.CompanyId == null));
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.EntityName))
             query = query.Where(a => a.Entity == filter.EntityName.Trim());
@@ -53,20 +58,45 @@ public sealed class AuditLogQueryService : IAuditLogQueryService
     /// </summary>
     private async Task<List<string>> ResolveReferenceAsync(string reference, CancellationToken cancellationToken)
     {
+        // A mesma matrícula (ou número) pode existir nas duas empresas: só as das empresas visíveis.
+        var companies = _scope is null ? null : (await VisibleCompaniesAsync(cancellationToken)).Companies;
         if (reference.StartsWith("MED-", StringComparison.OrdinalIgnoreCase))
         {
             var upper = reference.ToUpperInvariant();
-            var caseId = await _context.DisciplinaryCases.IgnoreQueryFilters().Where(c => c.CaseNumber == upper).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(cancellationToken);
-            return caseId is { } id ? (await CaseEntityIdsAsync(id, cancellationToken)).Select(x => x.ToString()).ToList() : [];
+            var caseIds = await _context.DisciplinaryCases.IgnoreQueryFilters()
+                .Where(c => c.CaseNumber == upper && (companies == null || companies.Contains(c.CompanyId)))
+                .Select(c => c.Id).ToListAsync(cancellationToken);
+            var ids = new List<string>();
+            foreach (var id in caseIds)
+                ids.AddRange((await CaseEntityIdsAsync(id, cancellationToken)).Select(x => x.ToString()));
+            return ids;
         }
 
-        var employeeIds = await _context.Employees.IgnoreQueryFilters().Where(e => e.EmployeeNumber == reference).Select(e => e.Id).ToListAsync(cancellationToken);
+        var employeeIds = await _context.Employees.IgnoreQueryFilters()
+            .Where(e => e.EmployeeNumber == reference && (companies == null || companies.Contains(e.CompanyId)))
+            .Select(e => e.Id).ToListAsync(cancellationToken);
         return employeeIds.Select(x => x.ToString()).ToList();
+    }
+
+    /// <summary>Empresas com escopo total na requisição; e se os eventos sem empresa entram (escopo total em todas).</summary>
+    private async Task<(List<Guid> Companies, bool IncludeWithoutCompany)> VisibleCompaniesAsync(CancellationToken cancellationToken)
+    {
+        var filter = await _scope!.GetFilterAsync(cancellationToken);
+        var companies = filter.FullCompanyIds.ToList();
+        var active = await _context.Companies.AsNoTracking().Where(c => c.IsActive).Select(c => c.Id).ToListAsync(cancellationToken);
+        return (companies, companies.Count > 0 && active.All(companies.Contains));
     }
 
     public async Task<IReadOnlyList<AuditUserOptionDto>> SearchUsersAsync(string? term, CancellationToken cancellationToken = default)
     {
         var query = _context.Users.IgnoreQueryFilters().AsNoTracking();
+        if (_scope is not null)
+        {
+            // Só pessoas ligadas às empresas visíveis (perfil, mesmo retirado, ou conta criada nelas).
+            var companies = (await VisibleCompaniesAsync(cancellationToken)).Companies;
+            query = query.Where(u => (u.CreatedInCompanyId != null && companies.Contains(u.CreatedInCompanyId.Value))
+                                     || _context.UserRoles.IgnoreQueryFilters().Any(ur => ur.UserId == u.Id && companies.Contains(ur.CompanyId)));
+        }
         if (!string.IsNullOrWhiteSpace(term))
         {
             var t = term.Trim();
@@ -126,7 +156,8 @@ public sealed class AuditLogQueryService : IAuditLogQueryService
                 a.IpAddress,
                 a.CorrelationId,
                 a.OldValues,
-                a.NewValues))
+                a.NewValues,
+                _context.Companies.Where(c => c.Id == a.CompanyId).Select(c => c.Name).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<AuditLogDto>(items, pageNumber, pageSize, total);

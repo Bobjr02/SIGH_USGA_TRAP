@@ -1,44 +1,25 @@
-using Microsoft.EntityFrameworkCore;
 using SIGH.Application.Common.Authorization;
 using SIGH.Application.Interfaces;
-using SIGH.Persistence.Context;
 
 namespace SIGH.Persistence.Repositories;
 
 /// <summary>
-/// Escopo do usuário da requisição. Sem usuário autenticado o escopo é vazio (nada visível).
-/// Resolvido uma vez por requisição (serviço scoped).
+/// Escopo do usuário da requisição, calculado a partir do <see cref="ICompanyContext"/> (perfis vigentes por empresa,
+/// lidos do banco). Sem usuário autenticado o escopo é vazio (nada visível). Resolvido uma vez por requisição.
 /// </summary>
 public sealed class AccessScope : IAccessScope
 {
     private readonly ICurrentUserService _currentUser;
-    private readonly SighDbContext _context;
-    private readonly IDateTimeProvider _clock;
+    private readonly ICompanyContext _companies;
     private AccessScopeFilter? _filter;
 
-    public AccessScope(ICurrentUserService currentUser, SighDbContext context, IDateTimeProvider clock)
+    public AccessScope(ICurrentUserService currentUser, ICompanyContext companies)
     {
         _currentUser = currentUser;
-        _context = context;
-        _clock = clock;
+        _companies = companies;
     }
 
-    public bool HasFullAccess => _currentUser.HasPermission(PermissionCodes.DisciplinaryRecords.ViewAll);
-
-    public async Task<IReadOnlyCollection<Guid>> GetManagementUnitIdsAsync(CancellationToken cancellationToken = default)
-    {
-        if (_currentUser.UserId is not { } userId)
-            return Array.Empty<Guid>();
-
-        var now = _clock.UtcNow;
-        return await _context.UserManagementUnits.AsNoTracking()
-            .Where(x => x.UserId == userId
-                        && (x.ValidFrom == null || x.ValidFrom <= now)
-                        && (x.ValidUntil == null || x.ValidUntil > now))
-            .Select(x => x.ManagementUnitId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-    }
+    public bool AppliesToRequest => _currentUser.IsAuthenticated;
 
     public async Task<AccessScopeFilter> GetFilterAsync(CancellationToken cancellationToken = default)
     {
@@ -48,8 +29,16 @@ public sealed class AccessScope : IAccessScope
         if (!_currentUser.IsAuthenticated)
             return _filter = AccessScopeFilter.Nothing;
 
-        return _filter = HasFullAccess
-            ? AccessScopeFilter.Everything
-            : new AccessScopeFilter(false, await GetManagementUnitIdsAsync(cancellationToken));
+        var grants = await _companies.GetRequestGrantsAsync(cancellationToken);
+        var full = grants.Where(g => g.Has(PermissionCodes.DisciplinaryRecords.ViewAll)).Select(g => g.CompanyId).ToList();
+        var units = grants.Where(g => !g.Has(PermissionCodes.DisciplinaryRecords.ViewAll)).SelectMany(g => g.ManagementUnitIds).Distinct().ToList();
+        return _filter = new AccessScopeFilter(false, full, units);
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetCompanyIdsAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_currentUser.IsAuthenticated)
+            return Array.Empty<Guid>();
+        return (await _companies.GetRequestGrantsAsync(cancellationToken)).Select(g => g.CompanyId).ToList();
     }
 }

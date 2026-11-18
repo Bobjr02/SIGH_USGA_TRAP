@@ -18,6 +18,11 @@ public enum EmployeeImportBatchStatus
 /// </summary>
 public class EmployeeImportBatch : Entity
 {
+    /// <summary>Empresa para a qual o arquivo foi importado (a empresa ativa de quem importou).</summary>
+    public Guid CompanyId { get; private set; }
+
+    public void AssignToCompany(Guid companyId) => CompanyId = SIGH.Domain.Common.CompanyAssignment.Assign(CompanyId, companyId);
+
     public const int MaxFileNameLength = 255;
 
     public string FileName { get; private set; } = string.Empty;

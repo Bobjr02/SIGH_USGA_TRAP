@@ -190,7 +190,7 @@ public sealed class EmployeeDecisionSupportService : IEmployeeDecisionSupportSer
             return null;
 
         // Escopo por gerência: fora dele, o funcionário "não existe" (404).
-        if (_scope is not null && !(await _scope.GetFilterAsync(cancellationToken)).Allows(employee.ManagementUnitId))
+        if (_scope is not null && !(await _scope.GetFilterAsync(cancellationToken)).Allows(employee.CompanyId, employee.ManagementUnitId))
             return null;
 
         var facts = new List<MeasureFact>();

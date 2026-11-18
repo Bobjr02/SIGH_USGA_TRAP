@@ -57,8 +57,13 @@ public sealed record EmployeeImportPlan(
     int ActiveBefore,
     double AbsenceTerminationPercent,
     bool RequiresMassTerminationConfirmation,
-    string Fingerprint)
+    string Fingerprint,
+    /// <summary>Linhas rejeitadas porque a Chave Organização é de outra empresa.</summary>
+    int OtherCompanyRows = 0)
 {
+    /// <summary>Mais da metade das linhas é de outra empresa: o arquivo parece ser de outra empresa.</summary>
+    public bool LooksLikeOtherCompany => TotalRows > 0 && OtherCompanyRows * 2 > TotalRows;
+
     public IEnumerable<PlannedChange> Of(EmployeeChangeKind kind) => Changes.Where(c => c.Kind == kind);
     public int ErrorCount => Issues.Count(i => i.Severity == HrIssueSeverity.Error);
     public int WarningCount => Issues.Count(i => i.Severity == HrIssueSeverity.Warning);
@@ -77,15 +82,20 @@ public static class EmployeeImportPlanner
 {
     public const string AbsenceReasonPrefix = "Ausente da exportação do SAP";
 
+    /// <summary>Linha cuja Chave Organização não tem o prefixo da empresa ativa.</summary>
+    public const string OtherCompanyMessage = "gerência de outra empresa — confira se o arquivo é desta empresa";
+
     public static EmployeeImportPlan Plan(
         IReadOnlyList<HrRawRow> rawRows,
         IReadOnlyList<string> sheetWarnings,
         IReadOnlyList<EmployeeSnapshot> existing,
         ReferenceSnapshot references,
         DateOnly importDate,
-        double maxTerminationPercent)
+        double maxTerminationPercent,
+        string? managementUnitPrefix = null)
     {
         var issues = sheetWarnings.Select(w => new HrImportIssue(null, null, HrIssueSeverity.Warning, w)).ToList();
+        var otherCompanyRows = 0;
 
         // 1. Validação por linha.
         var rows = new List<HrRow>();
@@ -93,6 +103,16 @@ public static class EmployeeImportPlanner
         foreach (var raw in rawRows)
         {
             var row = HrRowValidator.Validate(raw, issues);
+            // Chave Organização de outra empresa: linha rejeitada (e a matrícula não conta como ausente).
+            if (row is not null && !string.IsNullOrEmpty(managementUnitPrefix)
+                && !row.ManagementUnitCode.StartsWith(managementUnitPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new HrImportIssue(row.RowNumber, row.EmployeeNumber, HrIssueSeverity.Error,
+                    $"Chave Organização {row.ManagementUnitCode}: {OtherCompanyMessage}."));
+                presentNumbers.Add(row.EmployeeNumber);
+                otherCompanyRows++;
+                continue;
+            }
             if (row is not null) rows.Add(row);
             else
             {
@@ -203,7 +223,8 @@ public static class EmployeeImportPlanner
             renamedDepts.Select(kv => (kv.Key, kv.Value)).ToList(),
             newMus.ToList(),
             activeBefore, Math.Round(percent, 2), requiresConfirmation,
-            Fingerprint(ordered, unchanged, sortedIssues));
+            Fingerprint(ordered, unchanged, sortedIssues),
+            otherCompanyRows);
     }
 
     /// <summary>

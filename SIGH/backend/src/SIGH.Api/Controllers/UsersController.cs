@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
@@ -20,14 +21,17 @@ public class UsersController : BaseController
     private readonly IUnlockUserService _unlockUserService;
     private readonly IGetUsersService _getUsersService;
     private readonly IGetUserByIdService _getUserByIdService;
+    private readonly SIGH.Application.Users.Access.IUserAccessAdministrationService _access;
 
     public UsersController(
         ICreateUserService createUserService,
         IChangeUserStatusService changeUserStatusService,
         IUnlockUserService unlockUserService,
         IGetUsersService getUsersService,
-        IGetUserByIdService getUserByIdService)
+        IGetUserByIdService getUserByIdService,
+        SIGH.Application.Users.Access.IUserAccessAdministrationService access)
     {
+        _access = access;
         _createUserService = createUserService;
         _changeUserStatusService = changeUserStatusService;
         _unlockUserService = unlockUserService;
@@ -36,6 +40,7 @@ public class UsersController : BaseController
     }
 
     [HttpPost]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Users.Create)]
     [ProducesResponseType(typeof(Result<CreateUserResponse>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -47,7 +52,22 @@ public class UsersController : BaseController
         return CreatedResult(nameof(GetUserById), new { id = result.Id }, result, "Usuário criado com sucesso.");
     }
 
+    /// <summary>
+    /// Vincula à empresa ativa uma conta que já existe (e-mail de outra empresa do grupo), atribuindo perfis nela.
+    /// Não cria outra conta e não mostra os perfis da outra empresa.
+    /// </summary>
+    [HttpPost("link")]
+    [CompanyRoute(CompanyRouteKind.Write)]
+    [Permission(PermissionCodes.Users.Create)]
+    [Permission(PermissionCodes.Users.ManageRoles)]
+    [ProducesResponseType(typeof(Result<SIGH.Application.Users.Access.LinkExistingUserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Result<SIGH.Application.Users.Access.LinkExistingUserResponse>>> LinkExistingUser(
+        [FromBody] SIGH.Application.Users.Access.LinkExistingUserRequest request, CancellationToken cancellationToken) =>
+        OkResult(await _access.LinkExistingUserAsync(GetUserId(), request, cancellationToken), "Usuário vinculado a esta empresa.");
+
     [HttpPatch("{id:guid}/status")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Users.ChangeStatus)]
     [ProducesResponseType(typeof(Result<ChangeUserStatusResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -60,6 +80,7 @@ public class UsersController : BaseController
     }
 
     [HttpPost("{id:guid}/unlock")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Users.Unlock)]
     [ProducesResponseType(typeof(Result<UnlockUserResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -73,6 +94,7 @@ public class UsersController : BaseController
     }
 
     [HttpGet]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Users.View)]
     [ProducesResponseType(typeof(Result<PagedList<UserSummaryDto>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<Result<PagedList<UserSummaryDto>>>> GetUsers([FromQuery] GetUsersQuery query, CancellationToken cancellationToken)
@@ -82,6 +104,7 @@ public class UsersController : BaseController
     }
 
     [HttpGet("{id:guid}", Name = nameof(GetUserById))]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Users.View)]
     [ProducesResponseType(typeof(Result<UserDetailDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

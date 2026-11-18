@@ -35,6 +35,9 @@ export SIGH_JWT_SECRET="$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom 2>/dev/null | h
 # Com --demo, o e-mail padrão do seed (o mesmo das capturas em SIGH/docs/telas).
 if [ "${#PW_CONFIG[@]}" -gt 0 ]; then export SIGH_ADMIN_EMAIL="admin@sigh.com.br"; else export SIGH_ADMIN_EMAIL="admin@e2e.local"; fi
 export SIGH_ADMIN_PASSWORD="$(random_secret 16)"
+# Primeiro administrador da Trapiche (Seed:Companies:TRAP), usado pelo multi-company.spec (fora do --demo).
+if [ "${#PW_CONFIG[@]}" -eq 0 ]; then export SIGH_TRAP_ADMIN_EMAIL="admin.trap@e2e.local"; else export SIGH_TRAP_ADMIN_EMAIL=""; fi
+export SIGH_TRAP_ADMIN_PASSWORD="$(random_secret 16)"
 export SIGH_DEMO_PASSWORD="$(random_secret 12)"   # exigida pelo compose.app.yml; usada só com --demo
 export SIGH_WEB_PORT="${SIGH_E2E_WEB_PORT:-18080}"
 export SIGH_MAILPIT_PORT="${SIGH_E2E_MAILPIT_PORT:-18025}"
@@ -95,6 +98,8 @@ E2E_BASE_URL="http://localhost:$SIGH_WEB_PORT" \
 E2E_MAILPIT_URL="http://localhost:$SIGH_MAILPIT_PORT" \
 E2E_ADMIN_EMAIL="$SIGH_ADMIN_EMAIL" \
 E2E_ADMIN_PASSWORD="$SIGH_ADMIN_PASSWORD" \
+E2E_TRAP_ADMIN_EMAIL="$SIGH_TRAP_ADMIN_EMAIL" \
+E2E_TRAP_ADMIN_PASSWORD="$SIGH_TRAP_ADMIN_PASSWORD" \
 E2E_DB_NAME="$SIGH_E2E_DB_NAME" \
 E2E_SQL_CONTAINER="$SQL_CONTAINER" \
 E2E_BASE_CONNECTION_STRING="Server=localhost;User Id=sa;Password=$SIGH_SA_PASSWORD;TrustServerCertificate=True;" \

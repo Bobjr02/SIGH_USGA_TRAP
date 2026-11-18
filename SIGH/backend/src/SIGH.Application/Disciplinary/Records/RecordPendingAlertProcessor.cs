@@ -49,35 +49,39 @@ public sealed class RecordPendingAlertProcessor : IRecordPendingAlertProcessor
         if (overdue.Count == 0)
             return 0;
 
-        var approvers = await RecordNotifier.Approvers(_db, now)
-            .Select(u => new { u.Id, u.FullName, u.Email })
-            .ToListAsync(cancellationToken);
-
         var today = BusinessCalendar.Today(now);
         var notified = 0;
-        foreach (var approver in approvers)
+        // Por empresa: o aprovador de uma empresa só é avisado das pendências dela (um resumo por empresa e por dia).
+        foreach (var companyId in overdue.Select(o => o.CompanyId).Distinct().ToList())
         {
-            var mine = overdue.Where(o => o.OpenedByUserId != approver.Id && o.DecidedByUserId != approver.Id).ToList();
-            if (mine.Count == 0)
-                continue;
+            var approvers = await RecordNotifier.Approvers(_db, now, companyId)
+                .Select(u => new { u.Id, u.FullName, u.Email })
+                .ToListAsync(cancellationToken);
 
-            var log = await _db.NotificationLogs.FirstOrDefaultAsync(l => l.SourceEntity == SourceEntity
-                                                                          && l.SourceEntityId == approver.Id
-                                                                          && l.EventType == RecordNotifier.PendingDigestType, cancellationToken);
-            if (log is not null && BusinessCalendar.DateOf(log.LastSentAt) >= today)
-                continue;
+            foreach (var approver in approvers)
+            {
+                var mine = overdue.Where(o => o.CompanyId == companyId && o.OpenedByUserId != approver.Id && o.DecidedByUserId != approver.Id).ToList();
+                if (mine.Count == 0)
+                    continue;
 
-            var companyId = mine[0].CompanyId;
-            var message = mine.Count == 1
-                ? $"1 medida aguarda aprovação há mais de {_options.PendingApprovalAlertDays} dias."
-                : $"{mine.Count} medidas aguardam aprovação há mais de {_options.PendingApprovalAlertDays} dias.";
-            _notifier.Notify(companyId, approver.Id, approver.FullName, approver.Email, "Medidas pendentes de aprovação", message, RecordNotifier.PendingDigestType, recordId: null);
+                var log = await _db.NotificationLogs.FirstOrDefaultAsync(l => l.CompanyId == companyId
+                                                                              && l.SourceEntity == SourceEntity
+                                                                              && l.SourceEntityId == approver.Id
+                                                                              && l.EventType == RecordNotifier.PendingDigestType, cancellationToken);
+                if (log is not null && BusinessCalendar.DateOf(log.LastSentAt) >= today)
+                    continue;
 
-            if (log is null)
-                _db.NotificationLogs.Add(new NotificationLog(companyId, SourceEntity, approver.Id, RecordNotifier.PendingDigestType, approver.Id, now));
-            else
-                log.RecordReminderSent(now);
-            notified++;
+                var message = mine.Count == 1
+                    ? $"1 medida aguarda aprovação há mais de {_options.PendingApprovalAlertDays} dias."
+                    : $"{mine.Count} medidas aguardam aprovação há mais de {_options.PendingApprovalAlertDays} dias.";
+                _notifier.Notify(companyId, approver.Id, approver.FullName, approver.Email, "Medidas pendentes de aprovação", message, RecordNotifier.PendingDigestType, recordId: null);
+
+                if (log is null)
+                    _db.NotificationLogs.Add(new NotificationLog(companyId, SourceEntity, approver.Id, RecordNotifier.PendingDigestType, approver.Id, now));
+                else
+                    log.RecordReminderSent(now);
+                notified++;
+            }
         }
 
         await _db.SaveChangesAsync(cancellationToken);

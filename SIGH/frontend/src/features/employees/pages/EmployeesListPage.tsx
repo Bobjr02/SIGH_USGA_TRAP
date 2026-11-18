@@ -19,13 +19,14 @@ import {
   formatDate,
   maskCpf,
   type EmployeeListFilters,
+  type EmployeeListItem,
 } from '../api/employeesApi';
 
 const PAGE_SIZE = 20;
 
 export const EmployeesListPage: React.FC = () => {
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { hasPermission, isAllCompanies } = useAuth();
   const [draft, setDraft] = useState({ searchTerm: '', status: '', group: '', managementUnitId: '', departmentId: '' });
   const [filters, setFilters] = useState<EmployeeListFilters>({ pageNumber: 1, pageSize: PAGE_SIZE });
 
@@ -123,6 +124,7 @@ export const EmployeesListPage: React.FC = () => {
         emptyMessage="Nenhum funcionário encontrado."
         emptyIcon={<Users size={32} />}
         columns={[
+          ...(isAllCompanies ? [{ key: 'company', header: 'Empresa', render: (e: EmployeeListItem) => e.companyName ?? '—' }] : []),
           {
             key: 'name',
             header: 'Nome',

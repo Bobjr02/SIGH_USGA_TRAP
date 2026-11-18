@@ -107,10 +107,11 @@ public class EmployeeConfiguration : AuditableEntityConfiguration<Employee>
         // Índices de Unicidade
         // CPF único entre funcionários não desligados: uma readmissão no SAP gera matrícula nova
         // para o mesmo CPF, e a matrícula antiga (desligada) continua no histórico.
-        builder.HasIndex(e => e.Cpf)
+        // A regra vale DENTRO de cada empresa: a mesma pessoa pode estar nas duas, com cadastros separados.
+        builder.HasIndex(e => new { e.CompanyId, e.Cpf })
             .IsUnique()
             .HasFilter("[IsDeleted] = 0 AND [Status] <> 5")
-            .HasDatabaseName("IX_Employees_Cpf");
+            .HasDatabaseName("IX_Employees_CompanyId_Cpf");
 
         builder.HasIndex(e => new { e.CompanyId, e.EmployeeNumber })
             .IsUnique()

@@ -9,6 +9,14 @@ const REFS = path.resolve(HERE, '../../../docs/referencias');
 export const EMPLOYEES_FILE = path.join(REFS, 'importacao-funcionarios', 'funcionarios_carga_inicial.xlsx');
 export const HISTORY_FILE = path.join(REFS, 'historico-disciplinar', 'base_disciplinar_ficticia.xlsx');
 
+/** Administrador da Trapiche pré-visualizando o arquivo da USGA: o alerta "Este arquivo parece ser de outra empresa". */
+export const otherCompanyPreview = async (page: Page) => {
+  await page.getByLabel('Planilha do SAP').setInputFiles(EMPLOYEES_FILE);
+  await page.getByRole('button', { name: 'Pré-visualizar' }).click();
+  await expect(page.getByTestId('other-company-alert')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('other-company-alert').scrollIntoViewIfNeeded();
+};
+
 /** Abre uma medida aprovada (aceita anexos) na aba Anexos, com o seletor de arquivo. */
 export const attachableRecord = async (page: Page) => {
   await page.goto('/medidas');

@@ -39,7 +39,7 @@ public class DisciplinaryReportQueryRepository : IDisciplinaryReportQueryReposit
 
         // Escopo: a medida do funcionário que pertence HOJE a uma gerência do escopo.
         var scope = await ScopeAsync(cancellationToken);
-        if (!scope.All)
+        if (!scope.Unrestricted)
         {
             var scopedEmployees = _context.Employees.InScope(scope);
             dbQuery = dbQuery.Where(x => scopedEmployees.Any(e => e.Id == x.Measure.EmployeeId));

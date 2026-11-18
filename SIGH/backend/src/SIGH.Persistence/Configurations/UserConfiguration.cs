@@ -31,6 +31,11 @@ public class UserConfiguration : AuditableEntityConfiguration<User>
             .IsUnique()
             .HasDatabaseName("IX_Users_Cpf");
 
+        builder.HasOne<SIGH.Domain.Employees.Entities.Company>()
+            .WithMany()
+            .HasForeignKey(u => u.CreatedInCompanyId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(u => u.PasswordHash)
             .HasMaxLength(256)
             .IsRequired();

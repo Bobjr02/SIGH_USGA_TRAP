@@ -139,7 +139,11 @@ public sealed record RecordSummaryDto(
     int? DaysToApproval = null,
     /// <summary>Vigência: só suspensões têm período (início a fim).</summary>
     DateOnly? SuspensionStart = null,
-    DateOnly? SuspensionEnd = null);
+    DateOnly? SuspensionEnd = null,
+    /// <summary>Empresa da medida (a do funcionário). A tela mostra a coluna Empresa no modo "Todas".</summary>
+    Guid CompanyId = default,
+    string? CompanyCode = null,
+    string? CompanyName = null);
 
 public sealed record RecordEvidenceDto(
     Guid Id, string Title, string? Description, string EvidenceType, bool HasFile, string? OriginalFileName,

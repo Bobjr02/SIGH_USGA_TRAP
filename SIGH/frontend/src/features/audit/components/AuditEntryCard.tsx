@@ -2,6 +2,7 @@ import React from 'react';
 import type { AuditLogDto } from '../api/auditApi';
 import { StatusChip, type Tone } from '../../../components/ui/StatusChip';
 import { actionLabel, describeChanges, entityLabel, formatDateTime } from './auditFormat';
+import { useIsAllCompanies } from '../../../contexts/AuthContext';
 
 const actionTone = (action: string): Tone => {
   if (action === 'Created') return 'success';
@@ -16,11 +17,17 @@ export const AuditEntryCard: React.FC<{ log: AuditLogDto }> = ({ log }) => {
   const all = describeChanges(log);
   const changes = all.filter((c) => !c.technical);
   const technical = all.filter((c) => c.technical);
+  const isAllCompanies = useIsAllCompanies();
   return (
     <article className="rounded-lg border border-line bg-surface p-4 shadow-card" data-testid="audit-entry">
       <div className="flex flex-wrap items-center gap-2">
         <StatusChip tone={actionTone(log.action)} label={actionLabel(log.action)} />
         <span className="text-sm font-semibold text-ink">{entityLabel(log.entity)}</span>
+        {isAllCompanies && (
+          <span className="text-xs font-medium text-ink" data-testid="audit-company">
+            Empresa: {log.companyName ?? 'sem empresa'}
+          </span>
+        )}
         <span className="text-xs text-muted">
           {formatDateTime(log.createdAt)} · {log.userName ?? 'Sistema'}
         </span>

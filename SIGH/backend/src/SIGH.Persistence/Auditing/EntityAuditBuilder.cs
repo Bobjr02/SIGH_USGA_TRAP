@@ -28,7 +28,8 @@ public static class EntityAuditBuilder
         Guid? userId,
         string? ipAddress,
         string? userAgent,
-        string? correlationId)
+        string? correlationId,
+        Guid? activeCompanyId = null)
     {
         var logs = new List<AuditLog>();
 
@@ -47,6 +48,7 @@ public static class EntityAuditBuilder
 
             logs.Add(new AuditLog
             {
+                CompanyId = CompanyOf(entry) ?? activeCompanyId,
                 Action = action,
                 Entity = entry.Metadata.ClrType.Name,
                 EntityId = entry.Properties.FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString(),
@@ -72,6 +74,7 @@ public static class EntityAuditBuilder
         {
             logs.Add(new AuditLog
             {
+                CompanyId = logs.Where(l => l.Entity == nameof(UserRole)).Select(l => l.CompanyId).FirstOrDefault(c => c != null) ?? activeCompanyId,
                 Action = SIGH.Application.Security.SecurityAuditActions.RolesOrPermissionsChanged,
                 Entity = "AccessControl",
                 NewValues = JsonSerializer.Serialize(new { changes = accessChanges }, JsonOptions),
@@ -85,6 +88,17 @@ public static class EntityAuditBuilder
         }
 
         return logs;
+    }
+
+    /// <summary>Empresa do próprio registro, quando ele tem CompanyId (funcionário, medida, motivo, perfil...).</summary>
+    private static Guid? CompanyOf(EntityEntry entry)
+    {
+        var property = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "CompanyId");
+        return property?.CurrentValue switch
+        {
+            Guid id when id != Guid.Empty => id,
+            _ => null
+        };
     }
 
     private static string? ResolveAction(EntityEntry entry) => entry.State switch

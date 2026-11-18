@@ -25,6 +25,7 @@ import { formatDateTime, formatPercent } from '../../../utils/formatters';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FilePicker } from '../../../components/ui/FilePicker';
 import { ImportSteps } from '../../../components/ui/ImportSteps';
+import { ImportTargetCompany, OtherCompanyFileAlert, useImportCompany } from '../../../components/ui/ImportCompany';
 import { formatBytes } from '../../disciplinary/evidence/evidenceFiles';
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -107,6 +108,7 @@ export const EmployeeImportPage: React.FC = () => {
   const [massConfirmed, setMassConfirmed] = useState(false);
 
   const batches = useQuery({ queryKey: employeeKeys.importBatches, queryFn: employeesApi.importBatches });
+  const { blocked: noCompany } = useImportCompany();
 
   const choose = (selected: File | null) => {
     setPreview(null);
@@ -164,6 +166,7 @@ export const EmployeeImportPage: React.FC = () => {
   const step = result ? 3 : preview ? 2 : file ? 1 : 0;
 
   const blockedByMass = !!preview?.requiresMassTerminationConfirmation && !massConfirmed;
+  const otherCompany = !!preview?.looksLikeOtherCompany;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -171,6 +174,7 @@ export const EmployeeImportPage: React.FC = () => {
 
       <Paper component="section" aria-label="Enviar planilha" elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <ImportSteps active={step} />
+        <ImportTargetCompany />
         <Typography variant="body2" color="text.secondary">
           Envie a exportação .xlsx do SAP. A pré-visualização não grava nada; confira as abas e depois confirme. Funcionários ausentes
           do arquivo são desligados com a data de hoje (nunca apagados).
@@ -185,10 +189,10 @@ export const EmployeeImportPage: React.FC = () => {
           hint="Exportação do SAP em .xlsx, até 25 MB."
           file={file}
           onChange={choose}
-          disabled={!!busy}
+          disabled={!!busy || noCompany}
         />
         <Box>
-          <Button variant="contained" onClick={runPreview} disabled={!file || !!busy}>
+          <Button variant="contained" onClick={runPreview} disabled={!file || !!busy || noCompany}>
             {busy === 'preview' ? <CircularProgress size={20} color="inherit" /> : 'Pré-visualizar'}
           </Button>
         </Box>
@@ -205,9 +209,15 @@ export const EmployeeImportPage: React.FC = () => {
       {preview && (
         <Paper component="section" aria-label="Pré-visualização" elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
           <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <OtherCompanyFileAlert show={otherCompany} rows={preview.otherCompanyRows} companyName={preview.companyName} />
             <Typography variant="h6" component="h2" sx={{ fontWeight: 700 }}>
               Pré-visualização de {preview.fileName}
             </Typography>
+            {preview.companyName && (
+              <Typography variant="body2" data-testid="preview-company">
+                Importando para: <strong>{preview.companyName}</strong>
+              </Typography>
+            )}
             <Typography variant="body2" color="text.secondary">
               {preview.summary.totalRows} linha(s) · {preview.summary.unchanged} sem mudança · válida até{' '}
               {new Date(preview.expiresAt).toLocaleTimeString('pt-BR')}
@@ -248,7 +258,7 @@ export const EmployeeImportPage: React.FC = () => {
             {tab === 'warnings' && <IssuesTable items={preview.warnings} label="Avisos" />}
           </Box>
           <Box sx={{ p: 2.5, display: 'flex', gap: 1.5, alignItems: 'center' }}>
-            <Button variant="contained" color="primary" onClick={confirm} disabled={!!busy || blockedByMass}>
+            <Button variant="contained" color="primary" onClick={confirm} disabled={!!busy || blockedByMass || otherCompany || noCompany}>
               {busy === 'confirm' ? <CircularProgress size={20} color="inherit" /> : 'Confirmar importação'}
             </Button>
             {preview.errors.length > 0 && (

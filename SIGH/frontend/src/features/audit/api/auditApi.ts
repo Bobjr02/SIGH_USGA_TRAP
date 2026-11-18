@@ -14,6 +14,8 @@ export interface AuditLogDto {
   oldValues?: string | null;
   /** JSON com os valores novos (ou os detalhes do evento de segurança). */
   newValues?: string | null;
+  /** Empresa do registro (mostrada no modo "Todas"). */
+  companyName?: string | null;
 }
 
 export interface AuditPage {

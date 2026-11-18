@@ -101,7 +101,9 @@ public class DisciplinaryCaseConfiguration : IEntityTypeConfiguration<Disciplina
 
         builder.Property(c => c.HistoryKey).HasMaxLength(DisciplinaryCase.HistoryKeyMaxLength);
         // Idempotência da importação do histórico: uma linha da planilha = um registro.
-        builder.HasIndex(c => c.HistoryKey).IsUnique().HasFilter("[HistoryKey] IS NOT NULL");
+        // Por empresa: a mesma matrícula pode existir nas duas empresas.
+        builder.HasIndex(c => new { c.CompanyId, c.HistoryKey }).IsUnique().HasFilter("[HistoryKey] IS NOT NULL")
+            .HasDatabaseName("IX_DisciplinaryCases_CompanyId_HistoryKey");
         builder.HasIndex(c => c.HistoryImportBatchId);
 
         builder.HasIndex(c => c.Status);
