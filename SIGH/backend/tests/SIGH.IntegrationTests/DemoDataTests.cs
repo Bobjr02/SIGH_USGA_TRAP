@@ -49,27 +49,40 @@ public class DemoDataTests : IntegrationTestBase
 
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
-        (await db.Employees.CountAsync()).Should().Be(40);
-        (await db.EmployeeImportBatches.CountAsync()).Should().Be(1, "a carga entrou pelo importador, uma vez só");
+        var usga = SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId;
+        var trap = SIGH.Persistence.Seeds.DatabaseSeeder.TrapicheCompanyId;
+        (await db.Employees.CountAsync(e => e.CompanyId == usga)).Should().Be(40);
+        (await db.Employees.CountAsync(e => e.CompanyId == trap)).Should().Be(TrapicheDemoSpreadsheets.Employees.Count);
+        (await db.Employees.Where(e => e.CompanyId == trap).AllAsync(e => e.FullName.EndsWith("TESTE"))).Should().BeTrue();
+        (await db.ManagementUnits.Where(m => m.CompanyId == trap).Select(m => m.Code).OrderBy(c => c).ToListAsync()).Should().Equal("TRAP131", "TRAP132");
+        (await db.EmployeeImportBatches.CountAsync()).Should().Be(2, "uma carga por empresa, pelo importador, uma vez só");
         var demoUsers = await db.Users.Where(u => u.Email.EndsWith("@demo.local")).ToListAsync();
-        demoUsers.Should().HaveCount(6).And.OnlyContain(u => !u.MustChangePassword && u.Status == SIGH.Domain.Enums.UserStatus.Active);
+        demoUsers.Should().HaveCount(DemoDataSeeder.Users.Count + 1, "os usuários de demonstração e o admin.trap")
+            .And.OnlyContain(u => !u.MustChangePassword && u.Status == SIGH.Domain.Enums.UserStatus.Active);
+        var juridico = demoUsers.Single(u => u.Email == DemoDataSeeder.EmailOf("juridico"));
+        (await db.UserRoles.Where(ur => ur.UserId == juridico.Id).Select(ur => ur.CompanyId).Distinct().CountAsync()).Should().Be(2, "Jurídico nas duas empresas");
+        (await db.UserRoles.Where(ur => ur.User.Email == "auxiliar.trap@demo.local").Select(ur => ur.CompanyId).Distinct().ToListAsync()).Should().Equal(trap);
 
-        // b. histórico fictício pelo importador do histórico, uma vez só.
-        (await db.DisciplinaryCases.CountAsync(c => c.Kind == DisciplinaryCaseKind.Historical)).Should().Be(14);
-        (await db.DisciplinaryHistoryImportBatches.CountAsync()).Should().Be(1);
+        // b. histórico fictício pelo importador do histórico, uma vez só por empresa.
+        (await db.DisciplinaryCases.CountAsync(c => c.Kind == DisciplinaryCaseKind.Historical && c.CompanyId == usga)).Should().Be(14);
+        (await db.DisciplinaryCases.CountAsync(c => c.Kind == DisciplinaryCaseKind.Historical && c.CompanyId == trap)).Should().Be(TrapicheDemoSpreadsheets.History.Count);
+        (await db.DisciplinaryHistoryImportBatches.CountAsync()).Should().Be(2);
         (await db.InfractionTypes.CountAsync(i => i.Name == "USO DE CELULAR EM SERVIÇO")).Should().Be(1);
 
-        var records = await db.DisciplinaryCases.Include(c => c.Decisions).Include(c => c.Evidences)
-            .Where(c => c.Kind == DisciplinaryCaseKind.Record).ToListAsync();
-        records.Should().HaveCount(8);
-        records.Count(c => c.Status == DisciplinaryCaseStatus.Completed).Should().Be(4, "3 aprovadas + 1 suspensão aprovada");
-        records.Count(c => c.Status == DisciplinaryCaseStatus.Cancelled).Should().Be(1);
-        records.Count(c => c.Status == DisciplinaryCaseStatus.AwaitingDecision && c.Decision != null).Should().Be(2, "pendentes");
-        records.Count(c => c.Status == DisciplinaryCaseStatus.AwaitingDecision && c.Decision == null).Should().Be(1, "rejeitada aguardando correção");
-        records.Should().ContainSingle(c => c.Evidences.Any(e => e.HasFile && e.OriginalFileName == "carta-assinada-ficticia.pdf"));
-        var recordIds = records.Select(r => r.Id).ToList();
-        (await db.DisciplinaryMeasures.CountAsync(m => recordIds.Contains(m.DisciplinaryCaseId)
-            && m.MeasureType == DisciplinaryMeasureType.Suspension && m.Status == DisciplinaryMeasureStatus.Applied)).Should().Be(1, "a suspensão aprovada no SIGH");
+        foreach (var (company, total, approved, pending, rejected) in new[] { (usga, 8, 4, 2, 1), (trap, 5, 2, 1, 1) })
+        {
+            var records = await db.DisciplinaryCases.Include(c => c.Decisions).Include(c => c.Evidences)
+                .Where(c => c.Kind == DisciplinaryCaseKind.Record && c.CompanyId == company).ToListAsync();
+            records.Should().HaveCount(total);
+            records.Count(c => c.Status == DisciplinaryCaseStatus.Completed).Should().Be(approved);
+            records.Count(c => c.Status == DisciplinaryCaseStatus.Cancelled).Should().Be(1);
+            records.Count(c => c.Status == DisciplinaryCaseStatus.AwaitingDecision && c.Decision != null).Should().Be(pending, "pendentes");
+            records.Count(c => c.Status == DisciplinaryCaseStatus.AwaitingDecision && c.Decision == null).Should().Be(rejected, "rejeitada aguardando correção");
+            records.Should().ContainSingle(c => c.Evidences.Any(e => e.HasFile && e.OriginalFileName == "carta-assinada-ficticia.pdf"));
+            var recordIds = records.Select(r => r.Id).ToList();
+            (await db.DisciplinaryMeasures.CountAsync(m => recordIds.Contains(m.DisciplinaryCaseId)
+                && m.MeasureType == DisciplinaryMeasureType.Suspension && m.Status == DisciplinaryMeasureStatus.Applied)).Should().Be(1, "a suspensão aprovada no SIGH");
+        }
 
         // Os usuários entram com a senha de demonstração, sem troca obrigatória, e o escopo vale.
         var client = Factory.CreateClient();
@@ -79,6 +92,18 @@ public class DemoDataTests : IntegrationTestBase
         var seen = (await client.GetFromJsonAsync<Result<PagedResult<RecordSummaryDto>>>("/api/v1/disciplinary-records?pageSize=50"))!.Data!.Items;
         seen.Should().NotBeEmpty().And.OnlyContain(r => r.ManagementUnitCode == "USGA131");
         seen.Should().Contain(r => r.Origin == RecordOrigin.Historical, "o gestor vê o histórico da gerência dele");
+
+        // O gestor da TRAP131 vê só a TRAP131; o jurídico, no modo "Todas", vê as duas empresas.
+        var trapManager = Factory.CreateClient();
+        trapManager.DefaultRequestHeaders.Authorization = new("Bearer", (await AuthTestHelpers.LoginAsync(trapManager, "gestor.trap131@demo.local", DemoPassword)).Body.AccessToken);
+        var trapSeen = (await trapManager.GetFromJsonAsync<Result<PagedResult<RecordSummaryDto>>>("/api/v1/disciplinary-records?pageSize=50"))!.Data!.Items;
+        trapSeen.Should().NotBeEmpty().And.OnlyContain(r => r.ManagementUnitCode == "TRAP131" && r.CompanyCode == "TRAP");
+
+        var legal = Factory.CreateClient();
+        legal.DefaultRequestHeaders.Authorization = new("Bearer", (await AuthTestHelpers.LoginAsync(legal, "juridico@demo.local", DemoPassword)).Body.AccessToken);
+        legal.DefaultRequestHeaders.Add("X-SIGH-Company", "TODAS");
+        var all = (await legal.GetFromJsonAsync<Result<PagedResult<RecordSummaryDto>>>("/api/v1/disciplinary-records?pageSize=100"))!.Data!.Items;
+        all.Select(r => r.CompanyCode).Distinct().Should().BeEquivalentTo(["USGA", "TRAP"]);
     }
 
     [Fact]
