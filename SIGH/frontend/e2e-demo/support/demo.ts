@@ -30,7 +30,14 @@ export const PROFILES: DemoProfile[] = [
 
 export const profile = (login: string) => PROFILES.find((p) => p.login === login)!;
 
-export const login = async (page: Page, who: DemoProfile, theme: 'dark' | 'light' = 'dark') => {
+export type DemoTheme = 'dark' | 'light';
+
+/** Temas das suítes: os dois (escuro e claro); E2E_THEME=dark ou E2E_THEME=light restringe a um só. */
+export const THEMES: DemoTheme[] = process.env.E2E_THEME === 'dark' || process.env.E2E_THEME === 'light' ? [process.env.E2E_THEME] : ['dark', 'light'];
+
+export const THEME_LABEL: Record<DemoTheme, string> = { dark: 'escuro', light: 'claro' };
+
+export const login = async (page: Page, who: DemoProfile, theme: DemoTheme = 'dark') => {
   await page.addInitScript((t) => window.localStorage.setItem('sigh.theme', t), theme);
   await page.goto('/login');
   await page.getByLabel('E-mail').fill(who.email);

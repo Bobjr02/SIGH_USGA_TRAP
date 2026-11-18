@@ -1,0 +1,69 @@
+name: SIGH E2E Demo
+
+# Telas com DADOS DE DEMONSTRAÇÃO (SIGH/frontend/e2e-demo, Playwright + Chromium): acessibilidade (axe-core, temas
+# escuro e claro) e nenhum termo em inglês (temas escuro e claro), contra a stack EM CONTAINERS com o seed de
+# demonstração (compose.app.yml + compose.e2e.yml + compose.e2e-demo.yml), com segredos gerados no próprio job
+# (scripts/e2e-stack.sh --demo). Mesmo modelo do workflow e2e.yml; as capturas (screenshots.spec) não rodam aqui.
+on:
+  # Na main, só quando muda algo que a suíte exercita (o PR já rodou antes do merge).
+  push:
+    branches: [ main ]
+    paths:
+      - 'SIGH/**'
+      - 'compose.app.yml'
+      - 'compose.e2e.yml'
+      - 'compose.e2e-demo.yml'
+      - 'scripts/e2e-stack.sh'
+      - '.github/workflows/e2e-demo.yml'
+  # Em TODO PR para a main, sem filtro de caminhos (o check sempre aparece, como o do e2e.yml).
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-demo:
+    # Nome do check no PR. NÃO está marcado como obrigatório na proteção da main (decisão do dono do repositório).
+    name: E2E Demo (acessibilidade e nenhum termo em inglês)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: SIGH/frontend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: SIGH/frontend
+        run: npm ci
+
+      - name: Install Chromium (Playwright)
+        working-directory: SIGH/frontend
+        run: npx playwright install --with-deps chromium
+
+      # Sobe a stack com o seed de demonstração, roda o setup (troca de senha do administrador), a acessibilidade e o
+      # "nenhum termo em inglês" nos dois temas, e desmonta tudo, passando ou falhando.
+      - name: Run E2E Demo against the compose stack
+        run: scripts/e2e-stack.sh --demo e2e-demo/setup.spec.ts e2e-demo/accessibility.spec.ts e2e-demo/no-english.spec.ts
+
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-demo
+          path: |
+            SIGH/frontend/playwright-report/
+            SIGH/frontend/test-results/
+          retention-days: 14
