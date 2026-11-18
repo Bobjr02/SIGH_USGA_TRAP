@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using System.Net;
 using System.Security;
 using System.Text.Json;
@@ -55,6 +56,31 @@ public class GlobalExceptionMiddleware
                 problemDetails.Status = StatusCodes.Status413PayloadTooLarge;
                 problemDetails.Title = "Arquivo muito grande";
                 problemDetails.Detail = "O arquivo ou a requisição excede o tamanho máximo permitido.";
+                break;
+
+            case CompanyRequiredException companyRequired:
+                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                problemDetails.Status = (int)HttpStatusCode.BadRequest;
+                problemDetails.Title = "Escolha uma empresa";
+                problemDetails.Detail = companyRequired.Message;
+                problemDetails.Extensions["code"] = CompanyRequiredException.ErrorCode;
+                break;
+
+            case SIGH.Application.Users.CreateUser.ExistingUserCanBeLinkedException linkable:
+                context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+                problemDetails.Status = (int)HttpStatusCode.Conflict;
+                problemDetails.Title = "Usuário já existe";
+                problemDetails.Detail = linkable.Message;
+                problemDetails.Extensions["code"] = SIGH.Application.Users.CreateUser.ExistingUserCanBeLinkedException.ErrorCode;
+                problemDetails.Extensions["canLink"] = true;
+                break;
+
+            case CompanyNotAccessibleException companyNotAccessible:
+                context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                problemDetails.Status = (int)HttpStatusCode.NotFound;
+                problemDetails.Title = "Recurso Não Encontrado";
+                problemDetails.Detail = companyNotAccessible.Message;
+                problemDetails.Extensions["code"] = CompanyNotAccessibleException.ErrorCode;
                 break;
 
             case BusinessRuleValidationException businessEx:

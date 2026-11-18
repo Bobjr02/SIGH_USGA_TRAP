@@ -242,6 +242,8 @@ try
     // Troca de senha pendente: só change-password, logout e refresh ficam acessíveis.
     app.UseMiddleware<PasswordChangeRequiredMiddleware>();
     app.UseAuthorization();
+    // Escrita exige empresa específica ativa (o modo "Todas" é só leitura).
+    app.UseMiddleware<CompanyRouteMiddleware>();
 
     app.MapControllers();
 

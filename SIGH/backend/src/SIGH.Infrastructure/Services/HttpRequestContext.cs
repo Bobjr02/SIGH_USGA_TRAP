@@ -26,6 +26,15 @@ public sealed class HttpRequestContext : IRequestContext
         }
     }
 
+    public string? CompanyHeader
+    {
+        get
+        {
+            var value = _accessor.HttpContext?.Request.Headers[SIGH.Application.Common.Authorization.ICompanyContext.HeaderName].ToString();
+            return string.IsNullOrWhiteSpace(value) ? null : value.Length > 64 ? value[..64] : value;
+        }
+    }
+
     public string? CorrelationId =>
         _accessor.HttpContext?.Items.TryGetValue(CorrelationIdItemKey, out var id) == true ? id?.ToString() : null;
 }

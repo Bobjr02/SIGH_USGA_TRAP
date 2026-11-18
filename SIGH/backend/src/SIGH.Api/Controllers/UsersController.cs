@@ -20,14 +20,17 @@ public class UsersController : BaseController
     private readonly IUnlockUserService _unlockUserService;
     private readonly IGetUsersService _getUsersService;
     private readonly IGetUserByIdService _getUserByIdService;
+    private readonly SIGH.Application.Users.Access.IUserAccessAdministrationService _access;
 
     public UsersController(
         ICreateUserService createUserService,
         IChangeUserStatusService changeUserStatusService,
         IUnlockUserService unlockUserService,
         IGetUsersService getUsersService,
-        IGetUserByIdService getUserByIdService)
+        IGetUserByIdService getUserByIdService,
+        SIGH.Application.Users.Access.IUserAccessAdministrationService access)
     {
+        _access = access;
         _createUserService = createUserService;
         _changeUserStatusService = changeUserStatusService;
         _unlockUserService = unlockUserService;
@@ -46,6 +49,20 @@ public class UsersController : BaseController
         var result = await _createUserService.CreateUserAsync(request, cancellationToken);
         return CreatedResult(nameof(GetUserById), new { id = result.Id }, result, "Usuário criado com sucesso.");
     }
+
+    /// <summary>
+    /// Vincula à empresa ativa uma conta que já existe (e-mail de outra empresa do grupo), atribuindo perfis nela.
+    /// Não cria outra conta e não mostra os perfis da outra empresa.
+    /// </summary>
+    [HttpPost("link")]
+    [Permission(PermissionCodes.Users.Create)]
+    [Permission(PermissionCodes.Users.ManageRoles)]
+    [CompanyRoute(CompanyRouteKind.Write)]
+    [ProducesResponseType(typeof(Result<SIGH.Application.Users.Access.LinkExistingUserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Result<SIGH.Application.Users.Access.LinkExistingUserResponse>>> LinkExistingUser(
+        [FromBody] SIGH.Application.Users.Access.LinkExistingUserRequest request, CancellationToken cancellationToken) =>
+        OkResult(await _access.LinkExistingUserAsync(GetUserId(), request, cancellationToken), "Usuário vinculado a esta empresa.");
 
     [HttpPatch("{id:guid}/status")]
     [Permission(PermissionCodes.Users.ChangeStatus)]

@@ -70,6 +70,8 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IRequestContext, HttpRequestContext>();
+        services.AddScoped<SIGH.Application.Common.Authorization.ActiveCompanyHolder>();
+        services.AddScoped<SIGH.Application.Common.Authorization.ICompanyContext, SIGH.Application.Common.Authorization.CompanyContext>();
         services.AddScoped<IAuthorizedCompanyProvider, AuthorizedCompanyProvider>();
         // E-mail: SMTP (MailKit) com Email:Enabled=true; senão NullEmailService (aviso no startup).
         services.AddOptions<EmailOptions>()
