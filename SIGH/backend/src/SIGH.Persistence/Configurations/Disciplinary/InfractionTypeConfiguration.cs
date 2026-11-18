@@ -46,10 +46,15 @@ public class InfractionTypeConfiguration : IEntityTypeConfiguration<InfractionTy
         builder.HasIndex(i => i.IsActive);
         builder.HasIndex(i => i.IsDeleted);
 
-        // Filtered Unique Index
-        builder.HasIndex(i => i.Code)
+        // Código único POR EMPRESA (cada empresa tem o próprio catálogo).
+        builder.HasIndex(i => new { i.CompanyId, i.Code })
             .IsUnique()
             .HasFilter("[IsDeleted] = 0")
-            .HasDatabaseName("UX_InfractionTypes_Code");
+            .HasDatabaseName("UX_InfractionTypes_CompanyId_Code");
+
+        builder.HasOne<SIGH.Domain.Employees.Entities.Company>()
+            .WithMany()
+            .HasForeignKey(i => i.CompanyId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

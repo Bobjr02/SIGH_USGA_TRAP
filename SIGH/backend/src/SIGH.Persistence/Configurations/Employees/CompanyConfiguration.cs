@@ -11,9 +11,21 @@ public class CompanyConfiguration : AuditableEntityConfiguration<Company>
 
         builder.ToTable("Companies");
 
+        builder.Property(c => c.Code)
+            .HasMaxLength(Company.CodeMaxLength)
+            .IsRequired();
+
         builder.Property(c => c.Name)
             .HasMaxLength(150)
             .IsRequired();
+
+        builder.Property(c => c.ManagementUnitPrefix)
+            .HasMaxLength(Company.ManagementUnitPrefixMaxLength)
+            .IsRequired();
+
+        builder.HasIndex(c => c.Code)
+            .IsUnique()
+            .HasDatabaseName("UX_Companies_Code");
 
         builder.Property(c => c.LegalName)
             .HasMaxLength(200);

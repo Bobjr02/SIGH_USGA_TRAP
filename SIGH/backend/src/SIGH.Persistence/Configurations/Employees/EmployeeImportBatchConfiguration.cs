@@ -16,5 +16,7 @@ public class EmployeeImportBatchConfiguration : IEntityTypeConfiguration<Employe
         builder.Property(b => b.PlanFingerprint).HasMaxLength(64).IsRequired();
         builder.HasIndex(b => b.PreviewedAt);
         builder.HasIndex(b => b.FileSha256);
+        builder.HasIndex(b => new { b.CompanyId, b.PreviewedAt });
+        builder.HasOne<Company>().WithMany().HasForeignKey(b => b.CompanyId).OnDelete(DeleteBehavior.Restrict);
     }
 }

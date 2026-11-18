@@ -5,6 +5,12 @@ public class UserRole : AuditableEntity, IHasValidity
     public Guid UserId { get; set; }
     public virtual User User { get; set; } = null!;
 
+    /// <summary>
+    /// Empresa em que o perfil vale. Um mesmo usuário pode ter perfis diferentes em empresas diferentes;
+    /// cada atribuição tem a própria validade.
+    /// </summary>
+    public Guid CompanyId { get; set; }
+
     public Guid RoleId { get; set; }
     public virtual Role Role { get; set; } = null!;
 

@@ -120,10 +120,6 @@ namespace SIGH.Persistence.Migrations
 
                     b.HasIndex("HistoryImportBatchId");
 
-                    b.HasIndex("HistoryKey")
-                        .IsUnique()
-                        .HasFilter("[HistoryKey] IS NOT NULL");
-
                     b.HasIndex("IsDeleted");
 
                     b.HasIndex("OpenedAt");
@@ -138,6 +134,11 @@ namespace SIGH.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_DisciplinaryCases_Company_CaseNumber")
                         .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("CompanyId", "HistoryKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DisciplinaryCases_CompanyId_HistoryKey")
+                        .HasFilter("[HistoryKey] IS NOT NULL");
 
                     b.HasIndex("CompanyId", "IsDeleted");
 
@@ -435,6 +436,9 @@ namespace SIGH.Persistence.Migrations
                     b.Property<Guid?>("AppliedByUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("ExistingCount")
                         .HasColumnType("int");
 
@@ -495,6 +499,8 @@ namespace SIGH.Persistence.Migrations
                     b.HasIndex("FileSha256");
 
                     b.HasIndex("PreviewedAt");
+
+                    b.HasIndex("CompanyId", "PreviewedAt");
 
                     b.ToTable("DisciplinaryHistoryImportBatches", (string)null);
                 });
@@ -682,6 +688,9 @@ namespace SIGH.Persistence.Migrations
                     b.Property<Guid?>("ClosedByUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -709,6 +718,10 @@ namespace SIGH.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_HistoryImportStates_CompanyId");
+
                     b.ToTable("HistoryImportStates", (string)null);
                 });
 
@@ -725,6 +738,9 @@ namespace SIGH.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -771,11 +787,6 @@ namespace SIGH.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("UX_InfractionTypes_Code")
-                        .HasFilter("[IsDeleted] = 0");
-
                     b.HasIndex("DefaultSeverity");
 
                     b.HasIndex("IsActive");
@@ -784,6 +795,11 @@ namespace SIGH.Persistence.Migrations
 
                     b.HasIndex("Name");
 
+                    b.HasIndex("CompanyId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_InfractionTypes_CompanyId_Code")
+                        .HasFilter("[IsDeleted] = 0");
+
                     b.ToTable("InfractionTypes", (string)null);
                 });
 
@@ -791,6 +807,11 @@ namespace SIGH.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -817,6 +838,11 @@ namespace SIGH.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("ManagementUnitPrefix")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -833,6 +859,10 @@ namespace SIGH.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Companies_Code");
 
                     b.HasIndex("Name")
                         .HasDatabaseName("IX_Companies_Name");
@@ -1026,11 +1056,6 @@ namespace SIGH.Persistence.Migrations
                         .HasDatabaseName("IX_Employees_CorporateEmail")
                         .HasFilter("[CorporateEmail] IS NOT NULL");
 
-                    b.HasIndex("Cpf")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Employees_Cpf")
-                        .HasFilter("[IsDeleted] = 0 AND [Status] <> 5");
-
                     b.HasIndex("DepartmentId")
                         .HasDatabaseName("IX_Employees_DepartmentId");
 
@@ -1057,6 +1082,11 @@ namespace SIGH.Persistence.Migrations
                         .HasDatabaseName("IX_Employees_UserId")
                         .HasFilter("[UserId] IS NOT NULL");
 
+                    b.HasIndex("CompanyId", "Cpf")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Employees_CompanyId_Cpf")
+                        .HasFilter("[IsDeleted] = 0 AND [Status] <> 5");
+
                     b.HasIndex("CompanyId", "EmployeeNumber")
                         .IsUnique()
                         .HasDatabaseName("IX_Employees_CompanyId_EmployeeNumber");
@@ -1082,6 +1112,9 @@ namespace SIGH.Persistence.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<Guid?>("AppliedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CompanyId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("CreatedCount")
@@ -1150,6 +1183,8 @@ namespace SIGH.Persistence.Migrations
                     b.HasIndex("FileSha256");
 
                     b.HasIndex("PreviewedAt");
+
+                    b.HasIndex("CompanyId", "PreviewedAt");
 
                     b.ToTable("EmployeeImportBatches", (string)null);
                 });
@@ -1272,7 +1307,9 @@ namespace SIGH.Persistence.Migrations
                         .HasDatabaseName("IX_ManagementUnits_ParentManagementUnitId");
 
                     b.HasIndex("CompanyId", "Code")
-                        .HasDatabaseName("IX_ManagementUnits_CompanyId_Code");
+                        .IsUnique()
+                        .HasDatabaseName("IX_ManagementUnits_CompanyId_Code")
+                        .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
 
                     b.HasIndex("CompanyId", "Name")
                         .HasDatabaseName("IX_ManagementUnits_CompanyId_Name");
@@ -1289,6 +1326,9 @@ namespace SIGH.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("CorrelationId")
                         .HasMaxLength(100)
@@ -1347,6 +1387,8 @@ namespace SIGH.Persistence.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("CompanyId", "CreatedAt");
 
                     b.HasIndex("Entity", "EntityId");
 
@@ -1721,6 +1763,9 @@ namespace SIGH.Persistence.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("CreatedInCompanyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1783,6 +1828,8 @@ namespace SIGH.Persistence.Migrations
                     b.HasIndex("Cpf")
                         .IsUnique()
                         .HasDatabaseName("IX_Users_Cpf");
+
+                    b.HasIndex("CreatedInCompanyId");
 
                     b.HasIndex("Email")
                         .IsUnique()
@@ -1847,6 +1894,9 @@ namespace SIGH.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1885,9 +1935,12 @@ namespace SIGH.Persistence.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.HasIndex("UserId", "RoleId")
+                    b.HasIndex("CompanyId", "RoleId")
+                        .HasDatabaseName("IX_UserRoles_CompanyId_RoleId");
+
+                    b.HasIndex("UserId", "RoleId", "CompanyId")
                         .IsUnique()
-                        .HasDatabaseName("IX_UserRoles_UserId_RoleId")
+                        .HasDatabaseName("IX_UserRoles_UserId_RoleId_CompanyId")
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("UserRoles", (string)null);
@@ -2162,6 +2215,15 @@ namespace SIGH.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("SIGH.Domain.Disciplinary.Entities.DisciplinaryHistoryImportBatch", b =>
+                {
+                    b.HasOne("SIGH.Domain.Employees.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SIGH.Domain.Disciplinary.Entities.DisciplinaryMeasure", b =>
                 {
                     b.HasOne("SIGH.Domain.Disciplinary.Entities.DisciplinaryCase", null)
@@ -2193,6 +2255,24 @@ namespace SIGH.Persistence.Migrations
                     b.HasOne("SIGH.Domain.Disciplinary.Entities.InfractionType", null)
                         .WithMany()
                         .HasForeignKey("InfractionTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIGH.Domain.Disciplinary.Entities.HistoryImportState", b =>
+                {
+                    b.HasOne("SIGH.Domain.Employees.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIGH.Domain.Disciplinary.Entities.InfractionType", b =>
+                {
+                    b.HasOne("SIGH.Domain.Employees.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -2246,6 +2326,15 @@ namespace SIGH.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("SIGH.Domain.Employees.Entities.EmployeeImportBatch", b =>
+                {
+                    b.HasOne("SIGH.Domain.Employees.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SIGH.Domain.Employees.Entities.JobTitle", b =>
@@ -2331,6 +2420,14 @@ namespace SIGH.Persistence.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("SIGH.Domain.Entities.User", b =>
+                {
+                    b.HasOne("SIGH.Domain.Employees.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedInCompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("SIGH.Domain.Entities.UserManagementUnit", b =>
                 {
                     b.HasOne("SIGH.Domain.Employees.Entities.ManagementUnit", "ManagementUnit")
@@ -2352,6 +2449,12 @@ namespace SIGH.Persistence.Migrations
 
             modelBuilder.Entity("SIGH.Domain.Entities.UserRole", b =>
                 {
+                    b.HasOne("SIGH.Domain.Employees.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("SIGH.Domain.Entities.Role", "Role")
                         .WithMany("UserRoles")
                         .HasForeignKey("RoleId")

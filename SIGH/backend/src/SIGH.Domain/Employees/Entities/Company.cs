@@ -6,7 +6,17 @@ namespace SIGH.Domain.Employees.Entities;
 
 public class Company : AuditableEntity
 {
+    public const int CodeMaxLength = 10;
+    public const int ManagementUnitPrefixMaxLength = 20;
+
+    /// <summary>Código curto e fixo da empresa (USGA, TRAP). Vem do seed (Seed:Companies:&lt;código&gt;).</summary>
+    public string Code { get; private set; } = string.Empty;
+
+    /// <summary>Nome de exibição (editável).</summary>
     public string Name { get; private set; } = string.Empty;
+
+    /// <summary>Prefixo das Chaves Organização (gerências) desta empresa: "USGA" em USGA131, "TRAP" em TRAP131.</summary>
+    public string ManagementUnitPrefix { get; private set; } = string.Empty;
     public string? LegalName { get; private set; }
     public string? RegistrationNumber { get; private set; }
     public bool IsActive { get; private set; } = true;
@@ -30,6 +40,31 @@ public class Company : AuditableEntity
     {
         SetName(name);
     }
+
+    public void SetCode(string code)
+    {
+        var normalized = (code ?? string.Empty).Trim().ToUpperInvariant();
+        if (normalized.Length == 0)
+            throw new BusinessRuleValidationException("O código da empresa é obrigatório.");
+        if (normalized.Length > CodeMaxLength)
+            throw new BusinessRuleValidationException($"O código da empresa deve ter no máximo {CodeMaxLength} caracteres.");
+        Code = normalized;
+    }
+
+    public void SetManagementUnitPrefix(string prefix)
+    {
+        var normalized = (prefix ?? string.Empty).Trim().ToUpperInvariant();
+        if (normalized.Length == 0)
+            throw new BusinessRuleValidationException("O prefixo de gerência da empresa é obrigatório.");
+        if (normalized.Length > ManagementUnitPrefixMaxLength)
+            throw new BusinessRuleValidationException($"O prefixo de gerência deve ter no máximo {ManagementUnitPrefixMaxLength} caracteres.");
+        ManagementUnitPrefix = normalized;
+    }
+
+    /// <summary>A Chave Organização pertence a esta empresa (começa com o prefixo, sem diferenciar maiúsculas)?</summary>
+    public bool OwnsManagementUnitCode(string? code) =>
+        !string.IsNullOrWhiteSpace(code) && !string.IsNullOrEmpty(ManagementUnitPrefix)
+        && code.Trim().StartsWith(ManagementUnitPrefix, StringComparison.OrdinalIgnoreCase);
 
     public void UpdateLegalName(string? legalName)
     {

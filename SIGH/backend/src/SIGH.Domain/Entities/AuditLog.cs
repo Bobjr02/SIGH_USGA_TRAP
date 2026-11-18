@@ -2,6 +2,12 @@ namespace SIGH.Domain.Entities;
 
 public class AuditLog : AuditableEntity
 {
+    /// <summary>
+    /// Empresa do registro auditado (a do próprio registro, se ele tiver CompanyId; senão a empresa ativa da
+    /// requisição). Nulo: evento sem empresa (ex.: login), visível só a quem tem Audit.View em todas as empresas.
+    /// </summary>
+    public Guid? CompanyId { get; set; }
+
     public Guid? UserId { get; set; }
     public virtual User? User { get; set; }
 
