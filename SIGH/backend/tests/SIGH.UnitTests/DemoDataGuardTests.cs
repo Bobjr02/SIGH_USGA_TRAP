@@ -1,5 +1,5 @@
 using FluentAssertions;
-using SIGH.Api.Demo;
+using SIGH.Demo;
 using Xunit;
 
 namespace SIGH.UnitTests;
@@ -23,6 +23,24 @@ public class DemoDataGuardTests
     [Fact]
     public void WithoutDemoData_AnyEnvironmentIsFine() =>
         DemoDataGuard.IsAllowed(new DemoDataOptions { DemoData = false }, "Production").Should().BeTrue();
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public void TheSeeder_IsOnlyRegisteredWithDemoData(bool demoData, int registrations)
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddDemoData(demoData);
+        services.Count(s => s.ServiceType == typeof(DemoDataSeeder)).Should().Be(registrations);
+    }
+
+    [Fact]
+    public void TheApi_DoesNotReferenceOpenXml_OnlyTheDemoProjectDoes()
+    {
+        typeof(SIGH.Api.Controllers.HealthController).Assembly.GetReferencedAssemblies()
+            .Select(a => a.Name).Should().NotContain("DocumentFormat.OpenXml");
+        typeof(DemoDataSeeder).Assembly.GetName().Name.Should().Be("SIGH.Demo");
+    }
 
     [Fact]
     public void TheFictitiousPdf_LooksLikeAPdf()

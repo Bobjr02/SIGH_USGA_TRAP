@@ -1,3 +1,7 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -17,7 +21,7 @@ using SIGH.Domain.Disciplinary.Enums;
 using SIGH.Domain.Repositories;
 using SIGH.Persistence.Context;
 
-namespace SIGH.Api.Demo;
+namespace SIGH.Demo;
 
 /// <summary>
 /// Dados de demonstração FICTÍCIOS, criados pelos SERVIÇOS REAIS (importador de funcionários, criação de
@@ -53,6 +57,8 @@ public sealed class DemoDataSeeder
         new("auxiliar.usga", "AUXILIAR DA USGA DEMO TESTE", SyntheticCpf("900000008"), [SystemRoles.HrRegistrar], []),
         new("encarregado.usga", "ENCARREGADO DA USGA DEMO TESTE", SyntheticCpf("900000009"), [SystemRoles.HrApprover], []),
         new("gestor.usga131", "GESTOR DA USGA131 DEMO TESTE", SyntheticCpf("900000010"), [SystemRoles.Manager], ["USGA131"]),
+        // Nas duas empresas: administrador do grupo (modo "Todas" nas telas de administração: usuários e lotes).
+        new("admin.grupo", "ADMINISTRADOR DO GRUPO DEMO TESTE", SyntheticCpf("900000015"), [SystemRoles.Administrator], [], AlsoIn: [CompanyDefaults.TrapicheCode]),
         // Por empresa: Trapiche (o admin.trap é o primeiro administrador da Trapiche na demonstração).
         new("auxiliar.trap", "AUXILIAR DA TRAPICHE DEMO TESTE", SyntheticCpf("900000012"), [SystemRoles.HrRegistrar], [], CompanyDefaults.TrapicheCode),
         new("encarregado.trap", "ENCARREGADO DA TRAPICHE DEMO TESTE", SyntheticCpf("900000013"), [SystemRoles.HrApprover], [], CompanyDefaults.TrapicheCode),

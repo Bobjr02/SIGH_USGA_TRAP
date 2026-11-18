@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using SIGH.Api.Demo;
+using SIGH.Demo;
 using SIGH.Application.Common.Models;
 using SIGH.Application.Disciplinary.Records;
 using SIGH.Application.Interfaces;

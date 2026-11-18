@@ -51,7 +51,7 @@ public class HealthController : BaseController
                 )
             },
             // Só um booleano: o front mostra a faixa "AMBIENTE DE DEMONSTRAÇÃO" (Development ou Demo).
-            Demo: SIGH.Api.Demo.DemoDataGuard.IsDemoEnvironment(_environment.EnvironmentName)
+            Demo: SIGH.Demo.DemoDataGuard.IsDemoEnvironment(_environment.EnvironmentName)
         );
 
         return OkResult(response, "Status de saúde do sistema obtido com sucesso.");
