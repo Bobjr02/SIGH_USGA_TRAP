@@ -132,6 +132,7 @@ Write-Host '   auxiliar.trap@demo.local       RH - Registro       encarregado.tr
 Write-Host '   gestor.trap131@demo.local      Gestor da TRAP131'
 Write-Host '   As duas empresas (seletor "Empresa" no topo)'
 Write-Host '   juridico@demo.local            Juridico na USGA e na Trapiche'
+Write-Host '   admin.grupo@demo.local         Administrador na USGA e na Trapiche'
 Write-Host ''
 Write-Host " E-mails (Mailpit): http://localhost:$mailPort"
 Write-Host ' Parar:  scripts\local-down.ps1     Zerar:  scripts\local-reset.ps1'

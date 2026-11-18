@@ -129,6 +129,7 @@ Abra **http://localhost:8080** (Chrome ou Edge). A senha dos usuários abaixo é
 | `gestor.agricola@demo.local` | USGA · Gestor da USGA137 e USGA141 | O **Painel**, as medidas e os funcionários só das gerências agrícolas |
 | `preposto@demo.local` | USGA · RH – Registro + RH – Aprovador | A fila de aprovação e as próprias medidas (não aprova as que ele mesmo registrar) |
 | `admin.usga@demo.local`, `auxiliar.usga@demo.local`, `encarregado.usga@demo.local`, `gestor.usga131@demo.local` | USGA · Administrador, RH – Registro, RH – Aprovador, Gestor da USGA131 | Os mesmos papéis acima, com o nome da empresa na faixa do topo |
+| `admin.grupo@demo.local` | **USGA e Trapiche** · Administrador | O seletor **Empresa**; em **Todas**, **Usuários** com a coluna Empresa e as telas de importação só para consulta (lotes das duas empresas com a coluna Empresa e o aviso **"Selecione uma empresa"**, sem envio de arquivo) |
 | `admin.trap@demo.local` | Trapiche · Administrador | Só os usuários e os dados da Trapiche; em **Usuários → Novo usuário** com o e-mail de alguém da USGA, a opção **Vincular este usuário à Trapiche** |
 | `auxiliar.trap@demo.local`, `encarregado.trap@demo.local`, `gestor.trap131@demo.local` | Trapiche · RH – Registro, RH – Aprovador, Gestor da TRAP131 | As medidas e os funcionários fictícios da Trapiche (TRAP131/TRAP132) |
 | `admin@demo.local` | USGA · Administrador | Pede a troca de senha no primeiro acesso; o **Painel** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. Não registra nem aprova medidas |
@@ -139,7 +140,9 @@ planilha de penalidades (14 registros, com o selo "Histórico importado") e 8 me
 anexada). No funcionário 50090007, a aba **Apoio à decisão** mostra o histórico separado das medidas do SIGH.
 A **Trapiche** tem 12 funcionários fictícios (gerências TRAP131 e TRAP132, nomes terminando em "TESTE"), 5 registros de
 histórico e 5 medidas (aprovadas, uma suspensão, pendente, rejeitada e cancelada), todos de planilhas **geradas por
-código** (`SIGH/backend/src/SIGH.Api/Demo/TrapicheDemoSpreadsheets.cs`), sem nenhum arquivo versionado.
+código** (`SIGH/backend/src/SIGH.Demo/TrapicheDemoSpreadsheets.cs`), sem nenhum arquivo versionado. Tudo o que é de
+demonstração fica no projeto `SIGH.Demo` (com o `DocumentFormat.OpenXml`, MIT), fora da API: o seeder só é registrado e
+executado com `Seed:DemoData=true`, então em produção nada dele, nem o OpenXml, chega a ser carregado.
 O tema escuro é o padrão; o botão de lua (no topo) troca para o claro. As capturas de todas as telas, nos dois
 temas, estão em [`SIGH/docs/telas`](SIGH/docs/telas).
 
@@ -322,11 +325,16 @@ lotes de importação, avisos, auditoria e administradores. O e-mail (todos @usg
   todas as telas, exportações CSV, avisos, e-mails e auditoria. Toda permissão é avaliada na **empresa do recurso**
   (a do funcionário, da medida, do lote...), cruzada com os perfis vigentes do usuário nela.
 - **Empresa ativa**: quem tem perfil em uma empresa só trabalha nela; quem tem em duas ou mais vê no topo o seletor
-  **Empresa: USGA | Trapiche | Todas** (a escolha fica no navegador; o padrão é a empresa do primeiro perfil vigente).
-  O front manda a escolha no cabeçalho `X-SIGH-Company` (código da empresa ou `TODAS`), e o servidor **sempre** valida:
-  empresa sem perfil vigente é 404 (`COMPANY_NOT_FOUND`).
-- **"Todas" é só leitura**: listas, detalhes, relatórios, painel, CSV e auditoria das empresas do usuário, com a
-  coluna **Empresa**. Qualquer escrita (registrar, aprovar, rejeitar, corrigir, cancelar, anexar, importar, administrar)
+  **Empresa: USGA | Trapiche | Todas** (a escolha fica no navegador; sem escolha lembrada, a tela começa na empresa do primeiro perfil vigente e a mostra no
+  seletor e na faixa do topo). O front manda a escolha no cabeçalho `X-SIGH-Company` (código da empresa ou `TODAS`), e o
+  servidor **sempre** valida: empresa sem perfil vigente é 404 (`COMPANY_NOT_FOUND`) — nunca 401, que a tela entenderia
+  como sessão expirada. O servidor **nunca escolhe empresa por conta própria**: sem o cabeçalho, só quem tem uma única
+  empresa é atendido; com duas ou mais, a resposta é 400 (`COMPANY_REQUIRED`).
+- **"Todas" é só leitura**: listas (medidas, funcionários, usuários, lotes de importação), detalhes, relatórios, painel,
+  CSV, avisos e auditoria das empresas do usuário, com a coluna (ou etiqueta) **Empresa**. Os avisos no modo "Todas" são
+  os de todas as empresas da requisição (listar, contar e marcar como lidos). O que só existe por empresa — a situação da
+  importação de histórico — responde 400 (`COMPANY_REQUIRED`) e a tela mostra **"Selecione uma empresa"**; as telas de
+  importação abrem só para consulta dos lotes. Qualquer escrita (registrar, aprovar, rejeitar, corrigir, cancelar, anexar, importar, administrar)
   exige uma empresa específica e a permissão nela: no modo "Todas" a API responde 400 (`COMPANY_REQUIRED`).
 - **Administrador por empresa**: vê os usuários que têm (ou tiveram) perfil na empresa dele ou que foram criados nela;
   atribui e retira só perfis da empresa dele. Ao criar um usuário com e-mail que já existe em outra empresa, a API
@@ -481,8 +489,8 @@ As mensagens padrão do ASP.NET (ProblemDetails, binding, JSON) e do FluentValid
 - `GET /api/v1/disciplinary-records/overview?period=Last30Days|Last90Days|Last12Months|CurrentYear`: indicadores do
   período comparados ao período anterior de mesmo tamanho, evolução mensal e atividades recentes.
 
-Todos respeitam o escopo por gerência. Os endpoints antigos de `/api/v1/disciplinary-reports/*` continuam existindo
-(e testados no escopo), mas a tela usa só os novos.
+Todos respeitam o escopo por gerência. Os endpoints antigos de `/api/v1/disciplinary-reports/*` (sem uso pela tela) foram
+removidos, com a permissão `Disciplinary.Reports.ViewCases`, que só eles usavam (o seed a desativa em bancos antigos).
 
 #### Testes
 ```bash

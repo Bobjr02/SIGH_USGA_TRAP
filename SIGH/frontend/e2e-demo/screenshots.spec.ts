@@ -57,6 +57,10 @@ const SCREENS: { file: string; who: string; path?: string; detail?: string; prep
     prepare: (page) => selectCompany(page, 'Todas'),
   },
   { file: '19-importacao-outra-empresa', who: 'admin.trap', path: '/employees/import', prepare: otherCompanyPreview },
+  // Modo "Todas" nas telas de administração (admin.grupo, nas duas empresas): coluna Empresa e importações só para consulta.
+  { file: '20-usuarios-modo-todas', who: 'admin.grupo', path: '/admin/usuarios', prepare: (page) => selectCompany(page, 'Todas') },
+  { file: '21-importar-funcionarios-modo-todas', who: 'admin.grupo', path: '/employees/import', prepare: (page) => selectCompany(page, 'Todas') },
+  { file: '22-importar-historico-modo-todas', who: 'admin.grupo', path: '/admin/history-import', prepare: (page) => selectCompany(page, 'Todas') },
 ];
 
 for (const theme of ['escuro', 'claro'] as const) {
