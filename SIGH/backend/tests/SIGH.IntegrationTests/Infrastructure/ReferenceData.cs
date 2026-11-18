@@ -45,15 +45,18 @@ public static class ReferenceData
             .Where(e => e.EmployeeNumber == employeeNumber).Select(e => e.Id).SingleAsync();
     }
 
-    public static async Task<Guid> InfractionTypeAsync(CustomWebApplicationFactory factory, string code = "FALTA", string name = "Falta injustificada")
+    /// <summary>Motivo da empresa informada (padrão: USGA).</summary>
+    public static async Task<Guid> InfractionTypeAsync(CustomWebApplicationFactory factory, string code = "FALTA", string name = "Falta injustificada", Guid? companyId = null)
     {
+        var company = companyId ?? SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId;
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
-        var existing = await db.InfractionTypes.Where(i => i.Code == code).Select(i => (Guid?)i.Id).FirstOrDefaultAsync();
+        var existing = await db.InfractionTypes.Where(i => i.Code == code && i.CompanyId == company).Select(i => (Guid?)i.Id).FirstOrDefaultAsync();
         if (existing is { } id)
             return id;
 
         var type = InfractionType.Create(code, name, InfractionSeverity.Moderate);
+        type.AssignToCompany(company);
         db.InfractionTypes.Add(type);
         await db.SaveChangesAsync();
         return type.Id;

@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
@@ -29,24 +30,28 @@ public class DisciplinaryRecordsController : BaseController
     }
 
     [HttpGet]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryRecords.View)]
     public async Task<ActionResult<Result<PagedResult<RecordSummaryDto>>>> GetRecords([FromQuery] GetRecordsQuery query, CancellationToken cancellationToken) =>
         OkResult(await _queries.GetPagedAsync(query, cancellationToken));
 
     /// <summary>Opções do formulário e dos filtros (gerências e setores mascarados pelo escopo).</summary>
     [HttpGet("options")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryRecords.View)]
     public async Task<ActionResult<Result<RecordOptionsDto>>> GetOptions(CancellationToken cancellationToken) =>
         OkResult(await _queries.GetOptionsAsync(cancellationToken));
 
     /// <summary>Distribuição por situação e por tipo das medidas filtradas (mesmos filtros da lista).</summary>
     [HttpGet("stats")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.ViewMeasures)]
     public async Task<ActionResult<Result<RecordStatsDto>>> GetStats([FromQuery] GetRecordsQuery query, CancellationToken cancellationToken) =>
         OkResult(await _queries.GetStatsAsync(query, cancellationToken));
 
     /// <summary>CSV das medidas filtradas (cabeçalhos em português; até 10.000 linhas).</summary>
     [HttpGet("export")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.Export)]
     public async Task<IActionResult> Export([FromQuery] GetRecordsQuery query, CancellationToken cancellationToken)
     {
@@ -56,17 +61,20 @@ public class DisciplinaryRecordsController : BaseController
 
     /// <summary>Painel: indicadores do período, evolução mensal e atividades recentes (com escopo).</summary>
     [HttpGet("overview")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.ViewDashboard)]
     public async Task<ActionResult<Result<RecordOverviewDto>>> GetOverview([FromQuery] OverviewPeriod period = OverviewPeriod.Last30Days, CancellationToken cancellationToken = default) =>
         OkResult(await _queries.GetOverviewAsync(Enum.IsDefined(period) ? period : OverviewPeriod.Last30Days, cancellationToken));
 
     /// <summary>Quantas medidas o usuário pode aprovar agora (contador do menu).</summary>
     [HttpGet("pending-count")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryRecords.Approve)]
     public async Task<ActionResult<Result<int>>> GetPendingCount(CancellationToken cancellationToken) =>
         OkResult(await _queries.CountPendingForApprovalAsync(cancellationToken));
 
     [HttpGet("{id:guid}", Name = "GetDisciplinaryRecordById")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryRecords.View)]
     public async Task<ActionResult<Result<RecordDetailDto>>> GetById([FromRoute] Guid id, CancellationToken cancellationToken)
     {
@@ -80,6 +88,7 @@ public class DisciplinaryRecordsController : BaseController
     /// confirmPossibleDuplicate = true para confirmar.
     /// </summary>
     [HttpPost]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryRecords.Register)]
     public async Task<ActionResult<Result<RecordSaveResult>>> Register([FromBody] RecordInput input, CancellationToken cancellationToken)
     {
@@ -93,6 +102,7 @@ public class DisciplinaryRecordsController : BaseController
 
     /// <summary>Corrige uma medida rejeitada e a reenvia para aprovação (mesmos campos do registro).</summary>
     [HttpPut("{id:guid}")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryRecords.Register)]
     public async Task<ActionResult<Result<RecordSaveResult>>> Correct([FromRoute] Guid id, [FromBody] RecordInput input, CancellationToken cancellationToken)
     {
@@ -104,16 +114,19 @@ public class DisciplinaryRecordsController : BaseController
     }
 
     [HttpPost("{id:guid}/approve")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryRecords.Approve)]
     public async Task<ActionResult<Result<RecordDetailDto>>> Approve([FromRoute] Guid id, CancellationToken cancellationToken) =>
         OkResult(await _service.ApproveAsync(GetUserId(), id, cancellationToken), "Medida aprovada.");
 
     [HttpPost("{id:guid}/reject")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryRecords.Approve)]
     public async Task<ActionResult<Result<RecordDetailDto>>> Reject([FromRoute] Guid id, [FromBody] ReasonInput input, CancellationToken cancellationToken) =>
         OkResult(await _service.RejectAsync(GetUserId(), id, input, cancellationToken), "Medida rejeitada e devolvida ao registrante.");
 
     [HttpPost("{id:guid}/cancel")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryRecords.Register)]
     public async Task<ActionResult<Result<RecordDetailDto>>> Cancel([FromRoute] Guid id, [FromBody] ReasonInput input, CancellationToken cancellationToken) =>
         OkResult(await _service.CancelAsync(GetUserId(), id, input, cancellationToken), "Medida cancelada.");

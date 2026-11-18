@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
@@ -46,6 +47,7 @@ public class InfractionTypesController : BaseController
     /// </summary>
     /// <description>Cadastra um novo tipo de infração disciplinar no sistema SIGH.</description>
     [HttpPost]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.InfractionTypes.Create)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -67,6 +69,7 @@ public class InfractionTypesController : BaseController
     /// </summary>
     /// <description>Retorna os detalhes de um tipo de infração disciplinar por seu identificador único.</description>
     [HttpGet("{id:guid}", Name = "GetInfractionTypeById")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.InfractionTypes.View)]
     [Produces("application/json")]
     [ProducesResponseType(typeof(Result<GetInfractionTypeByIdResponse>), StatusCodes.Status200OK)]
@@ -86,6 +89,7 @@ public class InfractionTypesController : BaseController
     /// </summary>
     /// <description>Obtém a listagem paginada de tipos de infração disciplinar cadastrados.</description>
     [HttpGet]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.InfractionTypes.View)]
     [Produces("application/json")]
     [ProducesResponseType(typeof(Result<PagedResult<InfractionTypeDto>>), StatusCodes.Status200OK)]
@@ -104,6 +108,7 @@ public class InfractionTypesController : BaseController
     /// </summary>
     /// <description>Atualiza os dados cadastrais de um tipo de infração disciplinar existente.</description>
     [HttpPut("{id:guid}")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.InfractionTypes.Update)]
     [Consumes("application/json")]
     [Produces("application/json")]
@@ -127,6 +132,7 @@ public class InfractionTypesController : BaseController
     /// </summary>
     /// <description>Ativa um tipo de infração disciplinar inativo.</description>
     [HttpPost("{id:guid}/activate")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.InfractionTypes.Activate)]
     [Produces("application/json")]
     [ProducesResponseType(typeof(Result<ActivateInfractionTypeResponse>), StatusCodes.Status200OK)]
@@ -148,6 +154,7 @@ public class InfractionTypesController : BaseController
     /// </summary>
     /// <description>Desativa um tipo de infração disciplinar ativo.</description>
     [HttpPost("{id:guid}/deactivate")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.InfractionTypes.Deactivate)]
     [Produces("application/json")]
     [ProducesResponseType(typeof(Result<DeactivateInfractionTypeResponse>), StatusCodes.Status200OK)]

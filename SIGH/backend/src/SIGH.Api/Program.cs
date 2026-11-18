@@ -257,7 +257,8 @@ try
         Status = "Online",
         Environment = app.Environment.EnvironmentName,
         Documentation = "/swagger"
-    }));
+    })).WithMetadata(new SIGH.Application.Common.Authorization.CompanyRouteAttribute(
+        SIGH.Application.Common.Authorization.CompanyRouteKind.NotApplicable, "informação do sistema"));
 
     Log.Information("Aplicação SIGH.Api v1 iniciada com sucesso.");
     app.Run();

@@ -29,7 +29,17 @@ public class DisciplinaryPersistenceTests : IDisposable
 
         using var context = new SighDbContext(_options);
         context.Database.EnsureCreated();
+
+        // Motivos pertencem a uma empresa (FK): a empresa dos testes.
+        var company = new Company(TestCompanyId);
+        company.UpdateName("Empresa dos testes");
+        company.SetCode("TESTE");
+        company.SetManagementUnitPrefix("TESTE");
+        context.Companies.Add(company);
+        context.SaveChanges();
     }
+
+    private static readonly Guid TestCompanyId = Guid.Parse("00000000-0000-0000-0000-0000000000aa");
 
     public void Dispose()
     {
@@ -214,6 +224,7 @@ public class DisciplinaryPersistenceTests : IDisposable
             requiresFormalInvestigation: false,
             allowsTerminationRecommendation: false,
             description: "Atraso sem justificativa médica");
+        infraction.AssignToCompany(TestCompanyId);
 
         using (var context = CreateDbContext())
         {
@@ -243,6 +254,7 @@ public class DisciplinaryPersistenceTests : IDisposable
             requiresFormalInvestigation: false,
             allowsTerminationRecommendation: false,
             description: "Descrição");
+        infraction.AssignToCompany(TestCompanyId);
 
         using (var context = CreateDbContext())
         {
@@ -288,6 +300,7 @@ public class DisciplinaryPersistenceTests : IDisposable
             requiresFormalInvestigation: false,
             allowsTerminationRecommendation: false,
             description: "Infração");
+        infraction.AssignToCompany(TestCompanyId);
 
         var company = Company.Create("Empresa SIGH", "Empresa SIGH LTDA", "12345678000195");
         var unit = ManagementUnit.Create(company.Id, "Unidade 1", "UG-01");
@@ -384,6 +397,7 @@ public class DisciplinaryPersistenceTests : IDisposable
     public async Task ExistsByCodeAsync_ShouldNormalizeInputCode(string inputCode)
     {
         var infraction = InfractionType.Create("INF-CODE-01", "Tipo de Infração", InfractionSeverity.Low);
+        infraction.AssignToCompany(TestCompanyId);
 
         using (var context = CreateDbContext())
         {
@@ -420,6 +434,7 @@ public class DisciplinaryPersistenceTests : IDisposable
             code: "INF-REGR",
             name: "Infração Regressão",
             defaultSeverity: InfractionSeverity.Moderate);
+        infraction.AssignToCompany(TestCompanyId);
 
         // Primeiro DbContext: persiste o case e o tipo de infração (simula a request de Create)
         using (var context = CreateDbContext())

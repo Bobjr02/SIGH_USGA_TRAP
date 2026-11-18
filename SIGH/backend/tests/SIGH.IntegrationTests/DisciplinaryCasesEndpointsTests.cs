@@ -81,7 +81,8 @@ public class DisciplinaryCasesEndpointsTests : IntegrationTestBase
         {
             var context = scope.ServiceProvider.GetRequiredService<SighDbContext>();
 
-            company = Company.Create("Empresa Fluxo de Vida");
+            // A empresa do processo é a do usuário (USGA): com outra empresa, o processo "não existe" para ele.
+            company = context.Companies.Single(c => c.Id == SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId);
             var managementUnit = ManagementUnit.Create(company.Id, "Unidade Fluxo de Vida");
             var jobTitle = JobTitle.Create(company.Id, "Cargo Fluxo de Vida");
             employee = Employee.Create(
@@ -94,7 +95,6 @@ public class DisciplinaryCasesEndpointsTests : IntegrationTestBase
                 managementUnitId: managementUnit.Id,
                 initialStatus: EmployeeStatus.Active);
 
-            context.Companies.Add(company);
             context.ManagementUnits.Add(managementUnit);
             context.JobTitles.Add(jobTitle);
             context.Employees.Add(employee);
@@ -174,7 +174,7 @@ public class DisciplinaryCasesEndpointsTests : IntegrationTestBase
 
         var request = new CreateDisciplinaryCaseHttpRequest(
             CaseNumber: $"PROC-{Guid.NewGuid():N}"[..12],
-            CompanyId: Guid.NewGuid(),
+            CompanyId: SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId,
             Title: "Insubordinação grave no setor de TI",
             Description: "Funcionário recusou-se a executar diretrizes de segurança.",
             Priority: DisciplinaryCasePriority.High);
@@ -200,7 +200,7 @@ public class DisciplinaryCasesEndpointsTests : IntegrationTestBase
         await AuthenticateAsync();
 
         var caseNumber = $"PROC-{Guid.NewGuid():N}"[..12];
-        var companyId = Guid.NewGuid();
+        var companyId = SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId;
 
         var request1 = new CreateDisciplinaryCaseHttpRequest(
             CaseNumber: caseNumber,
@@ -249,7 +249,7 @@ public class DisciplinaryCasesEndpointsTests : IntegrationTestBase
 
         var createRequest = new CreateDisciplinaryCaseHttpRequest(
             CaseNumber: $"PROC-{Guid.NewGuid():N}"[..12],
-            CompanyId: Guid.NewGuid(),
+            CompanyId: SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId,
             Title: "Consulta por ID",
             Description: "Descrição do processo para consulta.");
 
@@ -437,7 +437,7 @@ public class DisciplinaryCasesEndpointsTests : IntegrationTestBase
 
         var createRequest = new CreateDisciplinaryCaseHttpRequest(
             CaseNumber: $"PROC-{Guid.NewGuid():N}"[..12],
-            CompanyId: Guid.NewGuid(),
+            CompanyId: SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId,
             Title: "Processo para Cancelamento",
             Description: "Descrição do processo para cancelamento.");
         var createResp = await _client.PostAsJsonAsync("/api/v1/disciplinary-cases", createRequest);

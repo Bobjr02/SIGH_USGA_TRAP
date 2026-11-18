@@ -20,6 +20,7 @@ public class DisciplinaryCaseEvidencesController : BaseController
 
     /// <summary>Anexa o arquivo à evidência. Formatos: pdf, jpg/jpeg, png, webp, mp4, mp3, m4a, docx, xlsx (validados pela assinatura).</summary>
     [HttpPost("{evidenceId:guid}/file")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryCases.AddEvidence)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(Result<EvidenceFileDto>), StatusCodes.Status200OK)]
@@ -53,6 +54,7 @@ public class DisciplinaryCaseEvidencesController : BaseController
     /// (os anexos das medidas usam as evidências) e o processo no escopo do usuário (senão 404).
     /// </summary>
     [HttpGet("{evidenceId:guid}/file")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryRecords.View)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<EvidenceDownload>), StatusCodes.Status404NotFound)]
@@ -80,6 +82,7 @@ public class DisciplinaryCaseEvidencesController : BaseController
 
     /// <summary>Remoção lógica da evidência. Motivo obrigatório; quem removeu vem do token.</summary>
     [HttpDelete("{evidenceId:guid}")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.DisciplinaryCases.RemoveEvidence)]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status400BadRequest)]

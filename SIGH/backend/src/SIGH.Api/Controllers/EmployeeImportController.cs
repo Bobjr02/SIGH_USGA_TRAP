@@ -27,6 +27,7 @@ public class EmployeeImportController : BaseController
     }
 
     [HttpPost("preview")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.Import)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(Result<EmployeeImportPreviewDto>), StatusCodes.Status200OK)]
@@ -42,6 +43,7 @@ public class EmployeeImportController : BaseController
     }
 
     [HttpPost("{batchId:guid}/confirm")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Employees.Import)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(Result<EmployeeImportResultDto>), StatusCodes.Status200OK)]
@@ -72,6 +74,7 @@ public class EmployeeImportController : BaseController
     }
 
     [HttpGet("batches")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Employees.Import)]
     [ProducesResponseType(typeof(Result<PagedResult<EmployeeImportBatchDto>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<Result<PagedResult<EmployeeImportBatchDto>>>> Batches(

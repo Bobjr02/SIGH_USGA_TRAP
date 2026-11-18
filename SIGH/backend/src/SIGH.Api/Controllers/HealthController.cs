@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
 using SIGH.Persistence.Context;
@@ -20,6 +21,7 @@ public class HealthController : BaseController
     }
 
     [HttpGet]
+    [CompanyRoute(CompanyRouteKind.NotApplicable, "saúde da aplicação")]
     [ProducesResponseType(typeof(Result<HealthStatusResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<Result<HealthStatusResponse>>> GetHealthStatus(CancellationToken cancellationToken)
     {

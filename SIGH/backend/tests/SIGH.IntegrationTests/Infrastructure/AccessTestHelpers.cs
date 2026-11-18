@@ -11,7 +11,8 @@ namespace SIGH.IntegrationTests.Infrastructure;
 /// <summary>Usuário de teste criado com os perfis de sistema reais (e gerências).</summary>
 public sealed record TestUser(Guid Id, string Email);
 
-public sealed record RoleGrant(string Role, DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidUntil = null);
+/// <summary>Perfil a atribuir; sem empresa, vale na USGA (a empresa dos dados de antes da multiempresa).</summary>
+public sealed record RoleGrant(string Role, DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidUntil = null, Guid? CompanyId = null);
 
 public static class AccessTestHelpers
 {
@@ -35,12 +36,18 @@ public static class AccessTestHelpers
             Status = UserStatus.Active,
             MustChangePassword = false
         };
+        var grants = roles.ToList();
+        user.CreatedInCompanyId = grants.FirstOrDefault()?.CompanyId ?? SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId;
         db.Users.Add(user);
 
-        foreach (var grant in roles)
+        foreach (var grant in grants)
         {
             var role = await db.Roles.SingleAsync(r => r.Name == grant.Role);
-            db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id, ValidFrom = grant.ValidFrom, ValidUntil = grant.ValidUntil });
+            db.UserRoles.Add(new UserRole
+            {
+                UserId = user.Id, RoleId = role.Id, ValidFrom = grant.ValidFrom, ValidUntil = grant.ValidUntil,
+                CompanyId = grant.CompanyId ?? SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId
+            });
         }
 
         foreach (var code in managementUnitCodes)
@@ -56,12 +63,14 @@ public static class AccessTestHelpers
     public static Task<TestUser> CreateUserAsync(CustomWebApplicationFactory factory, string email, string role, params string[] managementUnitCodes) =>
         CreateUserAsync(factory, email, [new RoleGrant(role)], managementUnitCodes);
 
-    /// <summary>Cliente autenticado (login real, token no header).</summary>
-    public static async Task<HttpClient> LoginAsync(CustomWebApplicationFactory factory, string email)
+    /// <summary>Cliente autenticado (login real, token no header) e, se informada, a empresa ativa (X-SIGH-Company).</summary>
+    public static async Task<HttpClient> LoginAsync(CustomWebApplicationFactory factory, string email, string? company = null)
     {
         var client = factory.CreateClient();
         var (login, _) = await AuthTestHelpers.LoginAsync(client, email, CustomWebApplicationFactory.DefaultPassword);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+        if (company is not null)
+            client.DefaultRequestHeaders.Add(SIGH.Application.Common.Authorization.ICompanyContext.HeaderName, company);
         return client;
     }
 

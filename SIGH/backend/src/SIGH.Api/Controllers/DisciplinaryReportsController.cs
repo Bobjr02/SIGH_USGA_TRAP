@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
@@ -38,6 +39,7 @@ public class DisciplinaryReportsController : BaseController
     /// Retorna os indicadores e distribuições consolidada do dashboard disciplinar.
     /// </summary>
     [HttpGet("dashboard")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.ViewDashboard)]
     [ProducesResponseType(typeof(Result<DisciplinaryDashboardDto>), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 400)]
@@ -67,6 +69,7 @@ public class DisciplinaryReportsController : BaseController
     /// Consulta analítica paginada de processos disciplinares.
     /// </summary>
     [HttpGet("cases")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.ViewCases)]
     [ProducesResponseType(typeof(Result<PagedResult<DisciplinaryCaseReportItemDto>>), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 400)]
@@ -96,6 +99,7 @@ public class DisciplinaryReportsController : BaseController
     /// Exporta o relatório analítico de processos disciplinares em formato CSV UTF-8.
     /// </summary>
     [HttpGet("cases/export")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.Export)]
     [ProducesResponseType(typeof(FileResult), 200, "text/csv")]
     [ProducesResponseType(typeof(ProblemDetails), 400)]
@@ -133,6 +137,7 @@ public class DisciplinaryReportsController : BaseController
     /// Consulta paginada de medidas disciplinares aplicadas.
     /// </summary>
     [HttpGet("measures")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.ViewMeasures)]
     [ProducesResponseType(typeof(Result<PagedResult<DisciplinaryMeasureSummaryDto>>), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 400)]
@@ -162,6 +167,7 @@ public class DisciplinaryReportsController : BaseController
     /// Consulta o histórico disciplinar consolidado de um funcionário específico.
     /// </summary>
     [HttpGet("employees/{employeeId:guid}/history")]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.DisciplinaryReports.ViewEmployeeHistory)]
     [ProducesResponseType(typeof(Result<EmployeeDisciplinaryHistoryDto>), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 400)]

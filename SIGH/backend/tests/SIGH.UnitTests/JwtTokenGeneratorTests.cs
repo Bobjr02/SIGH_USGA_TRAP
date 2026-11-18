@@ -50,8 +50,9 @@ public class JwtTokenGeneratorTests
 
         jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value.Should().Be(user.Id.ToString());
         jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value.Should().Be(user.Email);
-        jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value.Should().Be("Administrador");
-        jwtToken.Claims.Where(c => c.Type == "permission").Select(c => c.Value).Should().Contain("USERS_CREATE");
+        // Perfis e permissões são por empresa e lidos do banco a cada requisição: nunca vão no token.
+        jwtToken.Claims.Should().NotContain(c => c.Type == ClaimTypes.Role);
+        jwtToken.Claims.Should().NotContain(c => c.Type == "permission");
     }
 
     [Theory]

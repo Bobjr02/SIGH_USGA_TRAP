@@ -1,3 +1,4 @@
+using SIGH.Application.Common.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIGH.Application.Common.Models;
@@ -39,6 +40,7 @@ public class UsersController : BaseController
     }
 
     [HttpPost]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Users.Create)]
     [ProducesResponseType(typeof(Result<CreateUserResponse>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -55,9 +57,9 @@ public class UsersController : BaseController
     /// Não cria outra conta e não mostra os perfis da outra empresa.
     /// </summary>
     [HttpPost("link")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Users.Create)]
     [Permission(PermissionCodes.Users.ManageRoles)]
-    [CompanyRoute(CompanyRouteKind.Write)]
     [ProducesResponseType(typeof(Result<SIGH.Application.Users.Access.LinkExistingUserResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Result<SIGH.Application.Users.Access.LinkExistingUserResponse>>> LinkExistingUser(
@@ -65,6 +67,7 @@ public class UsersController : BaseController
         OkResult(await _access.LinkExistingUserAsync(GetUserId(), request, cancellationToken), "Usuário vinculado a esta empresa.");
 
     [HttpPatch("{id:guid}/status")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Users.ChangeStatus)]
     [ProducesResponseType(typeof(Result<ChangeUserStatusResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -77,6 +80,7 @@ public class UsersController : BaseController
     }
 
     [HttpPost("{id:guid}/unlock")]
+    [CompanyRoute(CompanyRouteKind.Write)]
     [Permission(PermissionCodes.Users.Unlock)]
     [ProducesResponseType(typeof(Result<UnlockUserResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -90,6 +94,7 @@ public class UsersController : BaseController
     }
 
     [HttpGet]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Users.View)]
     [ProducesResponseType(typeof(Result<PagedList<UserSummaryDto>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<Result<PagedList<UserSummaryDto>>>> GetUsers([FromQuery] GetUsersQuery query, CancellationToken cancellationToken)
@@ -99,6 +104,7 @@ public class UsersController : BaseController
     }
 
     [HttpGet("{id:guid}", Name = nameof(GetUserById))]
+    [CompanyRoute(CompanyRouteKind.Read)]
     [Permission(PermissionCodes.Users.View)]
     [ProducesResponseType(typeof(Result<UserDetailDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
