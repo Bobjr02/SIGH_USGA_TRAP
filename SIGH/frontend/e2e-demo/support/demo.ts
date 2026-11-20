@@ -2,7 +2,7 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { syntheticCpf } from '../../e2e/support/xlsx';
 import enumValues from '../../src/i18n/enum-values.json' with { type: 'json' };
 
-export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.com.br';
+export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@demo.local';
 
 export interface DemoProfile {
   login: string;
@@ -11,11 +11,14 @@ export interface DemoProfile {
   label: string;
 }
 
-const demoPassword = () => process.env.SIGH_DEMO_PASSWORD!;
+export const demoPassword = () => process.env.SIGH_DEMO_PASSWORD!;
 
-/** Perfis de demonstração (DemoDataSeeder) + o administrador do seed. */
+/**
+ * Perfis de demonstração (DemoDataSeeder) + o primeiro administrador do seed, que na demonstração também fica com a
+ * senha de demonstração (como no scripts/local-up).
+ */
 export const PROFILES: DemoProfile[] = [
-  { login: 'admin', email: ADMIN_EMAIL, password: () => process.env.E2E_NEW_PASSWORD!, label: 'Administrador' },
+  { login: 'admin', email: ADMIN_EMAIL, password: demoPassword, label: 'Administrador' },
   ...[
     'auxiliar', 'encarregado', 'juridico', 'gestor.industrial', 'gestor.agricola', 'preposto',
     // Por empresa (multiempresa): USGA e Trapiche.

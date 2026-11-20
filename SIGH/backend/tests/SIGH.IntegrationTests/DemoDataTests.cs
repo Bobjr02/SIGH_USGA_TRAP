@@ -34,12 +34,71 @@ public class DemoDataTests : IntegrationTestBase
         throw new DirectoryNotFoundException("SIGH/docs/referencias não encontrado.");
     }
 
-    private DemoDataSeeder Seeder() =>
+    private DemoDataSeeder Seeder(IConfiguration? configuration = null, Microsoft.Extensions.Logging.ILogger<DemoDataSeeder>? logger = null) =>
         new(Factory.Services.GetRequiredService<IServiceScopeFactory>(),
-            Factory.Services.GetRequiredService<IConfiguration>(),
+            configuration ?? Factory.Services.GetRequiredService<IConfiguration>(),
             Options.Create(new DemoDataOptions { DemoData = true, DemoPassword = DemoPassword, DemoDataPath = ReferenceFolder() }),
             Factory.Services.GetRequiredService<IDateTimeProvider>(),
-            NullLogger<DemoDataSeeder>.Instance);
+            logger ?? NullLogger<DemoDataSeeder>.Instance);
+
+    /// <summary>Guarda as mensagens de log (para conferir que não há "Demo: falha").</summary>
+    private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger<DemoDataSeeder>
+    {
+        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception) + (exception is null ? "" : " " + exception.Message)));
+    }
+
+    /// <summary>
+    /// A configuração do scripts/local-up (compose.app.yml): o primeiro administrador da USGA vem de Seed:CompanyAdmins,
+    /// sem senha, e Seed:AdminEmail aponta para outra conta (o valor que o appsettings.json tinha). Antes da correção, a
+    /// demonstração procurava o administrador por Seed:AdminEmail e falhava ("Demo: falha"). Agora ela acha o
+    /// administrador do seed, dá a ele a senha de demonstração pelo link e cria tudo.
+    /// </summary>
+    [Fact]
+    public async Task DemoData_WithTheLocalUpConfiguration_FindsTheSeedAdministrator_AndGivesHimTheDemoPassword()
+    {
+        var localUp = new ConfigurationBuilder()
+            .AddConfiguration(Factory.Services.GetRequiredService<IConfiguration>())
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Seed:AdminEmail"] = "admin@sigh.com.br",
+                ["Seed:CompanyAdmins:0:CompanyCode"] = "USGA",
+                ["Seed:CompanyAdmins:0:Email"] = CustomWebApplicationFactory.SeedAdminEmail,
+                ["Seed:CompanyAdmins:0:Name"] = "Administrador do Sistema",
+            })
+            .Build();
+        var logger = new CapturingLogger();
+
+        await Seeder(localUp, logger).SeedAsync();
+
+        logger.Entries.Should().NotContain(e => e.Message.Contains("Demo: falha"));
+        logger.Entries.Should().Contain(e => e.Message.Contains("Demo: dados de demonstração prontos"));
+        var (admin, _) = await AuthTestHelpers.LoginAsync(Factory.CreateClient(), CustomWebApplicationFactory.SeedAdminEmail, DemoPassword);
+        admin.MustChangePassword.Should().BeFalse();
+        await AuthTestHelpers.LoginAsync(Factory.CreateClient(), "admin.usga@demo.local", DemoPassword);
+        await AuthTestHelpers.LoginAsync(Factory.CreateClient(), "juridico@demo.local", DemoPassword);
+
+        // Subir de novo não troca a senha de ninguém nem falha.
+        var again = new CapturingLogger();
+        await Seeder(localUp, again).SeedAsync();
+        again.Entries.Should().NotContain(e => e.Message.Contains("Demo: falha"));
+        await AuthTestHelpers.LoginAsync(Factory.CreateClient(), CustomWebApplicationFactory.SeedAdminEmail, DemoPassword);
+    }
+
+    /// <summary>Sem nenhum administrador da USGA configurado a demonstração não é criada (e a falha fica no log).</summary>
+    [Fact]
+    public async Task DemoData_WithoutAUsgaSeedAdministrator_LogsTheFailure()
+    {
+        var none = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Seed:AdminEmail"] = "ninguem@sigh.test" }).Build();
+        var logger = new CapturingLogger();
+
+        await Seeder(none, logger).SeedAsync();
+
+        logger.Entries.Should().Contain(e => e.Level == Microsoft.Extensions.Logging.LogLevel.Error && e.Message.Contains("Demo: falha") && e.Message.Contains("Seed:CompanyAdmins"));
+    }
 
     [Fact]
     public async Task DemoData_UsesTheRealServices_CoversEveryState_AndIsIdempotent()
@@ -86,6 +145,8 @@ public class DemoDataTests : IntegrationTestBase
 
         // Os usuários entram com a senha de demonstração, sem troca obrigatória, e o escopo vale.
         var client = Factory.CreateClient();
+        // O administrador do seed também (pelo link de definição, internamente).
+        await AuthTestHelpers.LoginAsync(Factory.CreateClient(), CustomWebApplicationFactory.SeedAdminEmail, DemoPassword);
         var (login, _) = await AuthTestHelpers.LoginAsync(client, "gestor.industrial@demo.local", DemoPassword);
         login.MustChangePassword.Should().BeFalse();
         client.DefaultRequestHeaders.Authorization = new("Bearer", login.AccessToken);

@@ -110,7 +110,7 @@ A primeira vez baixa as imagens e compila (alguns minutos). O script:
 - cria o arquivo `.env.local` com senhas aleatórias e fortes, **só desta máquina** (ele está no `.gitignore`
   pela regra `.env.*` e nunca vai para o git);
 - sobe banco, e-mail, API e web, espera tudo ficar saudável e cria os dados de demonstração;
-- no final mostra o endereço, o e-mail e a senha do administrador, os usuários de demonstração e a senha deles.
+- no final mostra o endereço e os usuários de demonstração (com o administrador `admin@demo.local`) e a senha deles.
 
 O SIGH local só responde **neste computador** (http://localhost:8080 e http://localhost:8025): as portas são
 publicadas só em 127.0.0.1, então outras máquinas da rede não conseguem abrir a demonstração.
@@ -132,7 +132,7 @@ Abra **http://localhost:8080** (Chrome ou Edge). A senha dos usuários abaixo é
 | `admin.grupo@demo.local` | **USGA e Trapiche** · Administrador | O seletor **Empresa**; em **Todas**, **Usuários** com a coluna Empresa e as telas de importação só para consulta (lotes das duas empresas com a coluna Empresa e o aviso **"Selecione uma empresa"**, sem envio de arquivo) |
 | `admin.trap@demo.local` | Trapiche · Administrador | Só os usuários da Trapiche; em **Usuários → Novo usuário** com o e-mail de alguém da USGA, a opção **Vincular este usuário à Trapiche** |
 | `auxiliar.trap@demo.local`, `encarregado.trap@demo.local`, `gestor.trap131@demo.local` | Trapiche · RH – Registro, RH – Aprovador, Gestor da TRAP131 | As medidas e os funcionários fictícios da Trapiche (TRAP131/TRAP132) |
-| `admin@demo.local` | USGA · Administrador | Ninguém conhece a senha: no primeiro uso, abra no Mailpit o e-mail **"Acesso de administrador no SIGH"** e defina a senha pelo link. Depois, **Auditoria de acesso** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. **Nenhuma** tela de funcionários, medidas, painel ou relatórios |
+| `admin@demo.local` | USGA · Administrador (o primeiro, do seed) | Entra com a senha de demonstração: na demonstração (e só nela) a carga de dados usa, internamente, o link de definição de senha que o seed enviou. Fora da demonstração ninguém conhece a senha dele: ele a define pelo e-mail **"Acesso de administrador no SIGH"**. Vê **Auditoria de acesso** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. **Nenhuma** tela de funcionários, medidas, painel ou relatórios |
 
 Os administradores (`admin@`, `admin.usga@`, `admin.grupo@`, `admin.trap@`) só gerenciam **acessos**: não veem
 funcionários, medidas, anexos, painel, relatórios, exportações, avisos nem a auditoria de medidas (a API responde 403).
@@ -177,6 +177,12 @@ O `local-reset` apaga só os volumes deste SIGH local (projeto compose `sigh-loc
 > Para desenvolvedores: a stack é `compose.app.yml` (separado do `docker-compose.yml` de desenvolvimento, que
 > continua igual para `dotnet run` + `npm run dev`). No Linux/macOS use `scripts/local-up.sh`. O teste de ponta a
 > ponta contra a stack em containers é `npx playwright test -c playwright.local.config.ts` (em `SIGH/frontend`).
+>
+> `scripts/local-up-check.sh` roda o `local-up.sh` e confere o caminho inteiro: o log da API tem "Demo: dados de
+> demonstração prontos" e não tem "Demo: falha", a saída lista o administrador com a senha de demonstração e o
+> `admin@demo.local`, o `admin.usga@demo.local` e o `juridico@demo.local` entram. O CI roda o mesmo script em todo PR
+> (workflow `SIGH Local-up`, check "Local-up (stack de demonstração)"), com a MESMA configuração do local-up. O
+> `scripts/e2e-stack.sh --demo` também usa o administrador `admin@demo.local` com a senha de demonstração.
 
 ## Como Executar
 

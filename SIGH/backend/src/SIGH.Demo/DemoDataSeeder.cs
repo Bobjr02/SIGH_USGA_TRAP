@@ -130,9 +130,12 @@ public sealed class DemoDataSeeder
     {
         try
         {
-            var adminEmail = _configuration["Seed:AdminEmail"]?.Trim().ToLowerInvariant();
-            var adminId = await UserIdAsync(adminEmail, cancellationToken)
-                          ?? throw new InvalidOperationException("Dados de demonstração exigem o administrador do seed (Seed:AdminEmail e Seed:AdminPassword).");
+            // O primeiro administrador da USGA vem da MESMA configuração do seed (Seed:CompanyAdmins e as chaves antigas),
+            // sem senha conhecida. Na demonstração ele "usa o link" como as outras pessoas: fica com a senha de demonstração.
+            var adminId = await UsgaSeedAdministratorAsync(cancellationToken)
+                          ?? throw new InvalidOperationException(
+                              "Dados de demonstração exigem o primeiro administrador da USGA (Seed:CompanyAdmins com CompanyCode USGA, ou Seed:AdminEmail).");
+            await DefineDemoPasswordIfPendingAsync(adminId, CompanyDefaults.UsgaCode, cancellationToken);
             const string usga = CompanyDefaults.UsgaCode;
             const string trap = CompanyDefaults.TrapicheCode;
 
@@ -299,16 +302,7 @@ public sealed class DemoDataSeeder
                     id = created.Id;
                 });
 
-                // A própria pessoa "usa o link do e-mail": define a senha de demonstração pela redefinição real
-                // (o administrador não define senha de ninguém). Um link novo substitui o do e-mail de conta criada.
-                await RunAsAsync(id, user.Company, async sp =>
-                {
-                    var tokens = sp.GetRequiredService<SIGH.Application.Authentication.PasswordTokens.IPasswordTokenService>();
-                    var raw = await tokens.IssueAsync(id, SIGH.Domain.Entities.PasswordTokenPurpose.AccountSetup, ct);
-                    await sp.GetRequiredService<SighDbContext>().SaveChangesAsync(ct);
-                    await sp.GetRequiredService<SIGH.Application.Authentication.ResetPassword.IResetPasswordService>()
-                        .ResetPasswordAsync(new SIGH.Application.Authentication.ResetPassword.ResetPasswordRequest(raw, _options.DemoPassword!), ct);
-                });
+                await DefinePasswordThroughLinkAsync(id, user.Company, ct);
                 _logger.LogInformation("Demo: usuário {Email} criado na {Company}.", email, user.Company);
             }
 
@@ -447,6 +441,55 @@ public sealed class DemoDataSeeder
             accessor.HttpContext = previous;
         }
     }
+
+    /// <summary>
+    /// A conta da USGA que o seed criou como primeiro administrador: a primeira entrada da USGA em Seed:CompanyAdmins (ou
+    /// nas chaves antigas) que existe e tem o perfil Administrador na USGA.
+    /// </summary>
+    private async Task<Guid?> UsgaSeedAdministratorAsync(CancellationToken ct)
+    {
+        await using var scope = _scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
+        foreach (var entry in SIGH.Application.Users.Bootstrap.CompanyAdminProvisioner.ReadConfiguration(_configuration)
+                     .Where(e => e.CompanyCode == CompanyDefaults.UsgaCode))
+        {
+            var email = entry.Email.Trim().ToLowerInvariant();
+            var id = await db.UserRoles
+                .Where(ur => ur.User.Email == email && ur.CompanyId == CompanyDefaults.UsgaId && ur.Role.Name == SystemRoles.Administrator)
+                .Select(ur => (Guid?)ur.UserId).FirstOrDefaultAsync(ct);
+            if (id is not null)
+                return id;
+        }
+        return null;
+    }
+
+    /// <summary>Só a conta que ainda não definiu a senha (subir de novo não troca a senha de ninguém).</summary>
+    private async Task DefineDemoPasswordIfPendingAsync(Guid userId, string company, CancellationToken ct)
+    {
+        await using (var scope = _scopes.CreateAsyncScope())
+        {
+            var status = await scope.ServiceProvider.GetRequiredService<SighDbContext>().Users
+                .Where(u => u.Id == userId).Select(u => u.Status).SingleAsync(ct);
+            if (status != SIGH.Domain.Enums.UserStatus.PendingFirstAccess)
+                return;
+        }
+        await DefinePasswordThroughLinkAsync(userId, company, ct);
+        _logger.LogInformation("Demo: o primeiro administrador da {Company} recebeu a senha de demonstração (pelo link de definição).", company);
+    }
+
+    /// <summary>
+    /// A própria pessoa "usa o link do e-mail": define a senha de demonstração pela redefinição real (o administrador
+    /// não define senha de ninguém). Um link novo substitui o do e-mail. Só existe com Seed:DemoData (Development/Demo).
+    /// </summary>
+    private Task DefinePasswordThroughLinkAsync(Guid userId, string company, CancellationToken ct) =>
+        RunAsAsync(userId, company, async sp =>
+        {
+            var tokens = sp.GetRequiredService<SIGH.Application.Authentication.PasswordTokens.IPasswordTokenService>();
+            var raw = await tokens.IssueAsync(userId, SIGH.Domain.Entities.PasswordTokenPurpose.AccountSetup, ct);
+            await sp.GetRequiredService<SighDbContext>().SaveChangesAsync(ct);
+            await sp.GetRequiredService<SIGH.Application.Authentication.ResetPassword.IResetPasswordService>()
+                .ResetPasswordAsync(new SIGH.Application.Authentication.ResetPassword.ResetPasswordRequest(raw, _options.DemoPassword!), ct);
+        });
 
     private async Task<Guid?> UserIdAsync(string? email, CancellationToken ct)
     {

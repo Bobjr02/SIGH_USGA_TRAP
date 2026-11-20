@@ -32,8 +32,9 @@ random_secret() { printf '%s-Aa9' "$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2
 export SIGH_LOCAL_PROJECT="$PROJECT"
 export SIGH_SA_PASSWORD="$(random_secret 24)"
 export SIGH_JWT_SECRET="$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom 2>/dev/null | head -c 64 || true)"
-# Com --demo, o e-mail padrão do seed (o mesmo das capturas em SIGH/docs/telas).
-if [ "${#PW_CONFIG[@]}" -gt 0 ]; then export SIGH_ADMIN_EMAIL="admin@sigh.com.br"; else export SIGH_ADMIN_EMAIL="admin@e2e.local"; fi
+# Com --demo, a MESMA configuração do scripts/local-up (admin@demo.local, que na demonstração fica com a senha de
+# demonstração): o e2e-demo exercita o caminho do local-up.
+if [ "${#PW_CONFIG[@]}" -gt 0 ]; then export SIGH_ADMIN_EMAIL="admin@demo.local"; else export SIGH_ADMIN_EMAIL="admin@e2e.local"; fi
 # Primeiro administrador da Trapiche (Seed:CompanyAdmins), usado pelo multi-company.spec (fora do --demo).
 # Nenhum administrador tem senha: os specs a definem pelo link do e-mail (Mailpit).
 if [ "${#PW_CONFIG[@]}" -eq 0 ]; then export SIGH_TRAP_ADMIN_EMAIL="admin.trap@e2e.local"; else export SIGH_TRAP_ADMIN_EMAIL=""; fi
@@ -98,6 +99,7 @@ E2E_BASE_URL="http://localhost:$SIGH_WEB_PORT" \
 E2E_MAILPIT_URL="http://localhost:$SIGH_MAILPIT_PORT" \
 E2E_ADMIN_EMAIL="$SIGH_ADMIN_EMAIL" \
 E2E_TRAP_ADMIN_EMAIL="$SIGH_TRAP_ADMIN_EMAIL" \
+SIGH_DEMO_PASSWORD="$SIGH_DEMO_PASSWORD" \
 E2E_DB_NAME="$SIGH_E2E_DB_NAME" \
 E2E_SQL_CONTAINER="$SQL_CONTAINER" \
 E2E_API_CONTAINER="$API_CONTAINER" \
