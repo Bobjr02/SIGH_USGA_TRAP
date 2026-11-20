@@ -167,7 +167,7 @@ public class PasswordRecoveryTests : IntegrationTestBase
             roleId = (await scope.ServiceProvider.GetRequiredService<SighDbContext>().Roles.SingleAsync(r => r.Name == DatabaseSeeder.AdministratorRoleName)).Id;
 
         var created = await admin.PostAsJsonAsync("/api/v1/users", new CreateUserRequest(
-            "Nova Pessoa", "nova.pessoa@sigh.com", "71428793860", InitialPassword: null, RoleIds: [roleId]));
+            "Nova Pessoa", "nova.pessoa@sigh.com", "71428793860", RoleIds: [roleId]));
         created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
 
         var message = (await ReadOutboxAsync()).Should().ContainSingle(m => m.To == "nova.pessoa@sigh.com").Subject;
@@ -199,7 +199,9 @@ public class PasswordRecoveryTests : IntegrationTestBase
     private async Task<List<EmailOutboxMessage>> ReadOutboxAsync()
     {
         await using var scope = Factory.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<SighDbContext>().EmailOutbox.AsNoTracking().ToListAsync();
+        // O e-mail do primeiro administrador (gerado pelo seed a cada reset do banco) não faz parte destes fluxos.
+        return await scope.ServiceProvider.GetRequiredService<SighDbContext>().EmailOutbox.AsNoTracking()
+            .Where(m => m.To != CustomWebApplicationFactory.SeedAdminEmail).ToListAsync();
     }
 
     private static string ExtractToken(string body)

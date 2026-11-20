@@ -12,6 +12,7 @@ public static class EmailTemplates
 {
     public const string PasswordResetTemplate = "PasswordReset";
     public const string AccountCreatedTemplate = "AccountCreated";
+    public const string AdministratorAccessTemplate = "AdministratorAccess";
     public const string DeadlineAlertTemplate = "DeadlineAlert";
     public const string RecordNoticeTemplate = "RecordNotice";
 
@@ -79,6 +80,43 @@ public static class EmailTemplates
             "Se o link expirar, use &quot;Esqueci minha senha&quot; na tela de login.</p>");
 
         return new EmailContent(AccountCreatedTemplate, subject, html, text);
+    }
+
+    /// <summary>
+    /// Perfil Administrador concedido pelo primeiro acesso da publicação (Seed:CompanyAdmins) ou pela recuperação do
+    /// TI (linha de comando), com o link de definição de senha. Ninguém conhece a senha: a pessoa define a dela.
+    /// </summary>
+    public static EmailContent AdministratorAccess(string fullName, string email, string companyName, string setupLink, int validHours, string loginUrl)
+    {
+        var subject = $"Acesso de administrador no SIGH - {companyName}";
+
+        var text = new StringBuilder()
+            .AppendLine($"Olá, {fullName}.")
+            .AppendLine()
+            .AppendLine($"Você recebeu o perfil Administrador da empresa {companyName} no SIGH - Sistema Inteligente de Gestão de Histórico Disciplinar.")
+            .AppendLine($"Usuário (e-mail): {email}")
+            .AppendLine()
+            .AppendLine("Defina sua senha pelo link abaixo.")
+            .AppendLine($"O link vale por {validHours} horas e pode ser usado uma única vez:")
+            .AppendLine()
+            .AppendLine(setupLink)
+            .AppendLine()
+            .AppendLine($"Depois, entre em {loginUrl} com o seu e-mail e a senha que você definiu.")
+            .AppendLine("Se você não esperava este e-mail, avise o TI.")
+            .ToString();
+
+        var html = Layout(subject,
+            $"<p>Olá, {E(fullName)}.</p>" +
+            $"<p>Você recebeu o perfil <strong>Administrador</strong> da empresa <strong>{E(companyName)}</strong> no <strong>SIGH</strong> - Sistema Inteligente de Gestão de Histórico Disciplinar.</p>" +
+            $"<p>Usuário (e-mail): <strong>{E(email)}</strong></p>" +
+            "<p>Defina sua senha pelo botão abaixo.</p>" +
+            Button(setupLink, "Definir minha senha") +
+            $"<p>O link vale por <strong>{validHours} horas</strong> e pode ser usado uma única vez.</p>" +
+            LinkFallback(setupLink) +
+            $"<p>Depois, entre em <a href=\"{E(loginUrl)}\">{E(loginUrl)}</a> com o seu e-mail e a senha que você definiu. " +
+            "Se você não esperava este e-mail, avise o TI.</p>");
+
+        return new EmailContent(AdministratorAccessTemplate, subject, html, text);
     }
 
     public static EmailContent DeadlineAlert(string fullName, string title, string message, DateTimeOffset? dueDate, string link)

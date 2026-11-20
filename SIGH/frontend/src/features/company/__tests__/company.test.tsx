@@ -108,6 +108,7 @@ describe('administração por empresa', () => {
     server.use(
       ...commonHandlers(),
       meReturns(makeUser({ id: 'adm', permissions: [], companies: [admin] })),
+      http.get(`${API}/users/admin-status`, () => ok([])),
       http.get(`${API}/users`, () => ok({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0 })),
       http.get(`${API}/roles`, () => ok([{ id: 'r-legal', name: 'Legal', label: 'Jurídico', description: '', permissions: [] }])),
       http.get(`${API}/management-units`, () => ok([])),
@@ -178,6 +179,7 @@ describe('modo "Todas": empresa de cada item e nada escolhido implicitamente', (
     server.use(
       ...commonHandlers(),
       meReturns(makeUser({ id: 'adm2', permissions: [], companies: both([PERMISSIONS.USERS_VIEW]) })),
+      http.get(`${API}/users/admin-status`, () => ok([])),
       http.get(`${API}/users`, () =>
         ok({
           items: [

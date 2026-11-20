@@ -86,10 +86,14 @@ public class CompanyIsolationTests : IClassFixture<CustomWebApplicationFactory>
 
         ["GET /api/v1/audit-logs"] = (Probe)Contains(s => $"/api/v1/audit-logs?pageSize=200&reference={s.TrapRecordNumber}", s => s.TrapRecord.ToString()),
         ["GET /api/v1/audit-logs/users"] = (Probe)Contains(_ => "/api/v1/audit-logs/users?search=trap.registrar", _ => CompanyScenario.TrapRegistrar),
+        // Auditoria de acesso: o perfil do gestor da Trapiche (UserRole da Trapiche) e o seletor de usuários.
+        ["GET /api/v1/audit-logs/access"] = (Probe)Contains(_ => "/api/v1/audit-logs/access?pageSize=200", s => s.TrapManagerUserId.ToString()),
+        ["GET /api/v1/audit-logs/access/users"] = (Probe)Contains(_ => "/api/v1/audit-logs/access/users?search=trap.registrar", _ => CompanyScenario.TrapRegistrar),
 
         ["GET /api/v1/users"] = (Probe)Contains(_ => "/api/v1/users?pageSize=100", _ => CompanyScenario.TrapManager),
         ["GET /api/v1/users/{id:guid}"] = (Probe)Found(s => $"/api/v1/users/{s.TrapManagerUserId}"),
         ["GET /api/v1/users/{id:guid}/access"] = (Probe)Found(s => $"/api/v1/users/{s.TrapManagerUserId}/access"),
+        ["GET /api/v1/users/admin-status"] = (Probe)Contains(_ => "/api/v1/users/admin-status", _ => "\"companyCode\":\"TRAP\""),
         ["GET /api/v1/management-units"] = (Probe)Contains(_ => "/api/v1/management-units", _ => "TRAP131"),
 
         ["GET /api/v1/infraction-types"] = (Probe)Contains(_ => "/api/v1/infraction-types?pageSize=100", _ => CompanyScenario.TrapInfractionCode),
@@ -216,13 +220,14 @@ public class CompanyIsolationTests : IClassFixture<CustomWebApplicationFactory>
         // Administração de usuários e gerências.
         ["POST /api/v1/users"] = new(_ => Json(HttpMethod.Post, "/api/v1/users", new
         {
-            fullName = "SONDA TESTE", email = "sonda@sigh.test", cpf = "52998224725", initialPassword = "Sonda@123456", roleIds = new[] { Guid.NewGuid() }
+            fullName = "SONDA TESTE", email = "sonda@sigh.test", cpf = "52998224725", roleIds = new[] { Guid.NewGuid() }
         }), null, CompanyDefaults.TrapicheCode),
         ["POST /api/v1/users/link"] = new(_ => Json(HttpMethod.Post, "/api/v1/users/link",
             new { email = CompanyScenario.UsgaUser, roleIds = new[] { Guid.NewGuid() } }), null, CompanyDefaults.TrapicheCode),
         ["PATCH /api/v1/users/{id:guid}/status"] = new(s => Json(HttpMethod.Patch, TrapUserUrl(s) + "/status",
             new { userId = s.TrapManagerUserId, newStatus = (int)SIGH.Domain.Enums.UserStatus.Inactive, reason = "Sonda de isolamento." }), TrapUserUrl),
         ["POST /api/v1/users/{id:guid}/unlock"] = new(s => Json(HttpMethod.Post, TrapUserUrl(s) + "/unlock"), TrapUserUrl),
+        ["POST /api/v1/users/{id:guid}/setup-link"] = new(s => Json(HttpMethod.Post, TrapUserUrl(s) + "/setup-link"), TrapUserUrl),
         ["POST /api/v1/users/{id:guid}/roles"] = new(s => Json(HttpMethod.Post, TrapUserUrl(s) + "/roles", new { roleId = Guid.NewGuid() }), TrapUserUrl),
         ["DELETE /api/v1/users/{id:guid}/roles/{userRoleId:guid}"] = new(s => Json(HttpMethod.Delete, $"{TrapUserUrl(s)}/roles/{s.TrapManagerRoleLink}"), TrapUserUrl),
         ["POST /api/v1/users/{id:guid}/management-units"] = new(s => Json(HttpMethod.Post, TrapUserUrl(s) + "/management-units",

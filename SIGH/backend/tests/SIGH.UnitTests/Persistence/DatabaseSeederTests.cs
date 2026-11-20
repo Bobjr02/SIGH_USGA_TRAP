@@ -9,6 +9,11 @@ using SIGH.Domain.Entities;
 using SIGH.Domain.Enums;
 using SIGH.Persistence.Context;
 using SIGH.Persistence.Seeds;
+using Microsoft.Extensions.Options;
+using SIGH.Application.Options;
+using SIGH.Application.Security;
+using SIGH.Application.Users.Bootstrap;
+using SIGH.Application.Users.SetupLink;
 using Xunit;
 
 namespace SIGH.UnitTests.Persistence;
@@ -20,7 +25,11 @@ public class DatabaseSeederTests
     private static SighDbContext CreateContext(string dbName) =>
         new(new DbContextOptionsBuilder<SighDbContext>().UseInMemoryDatabase(dbName).Options);
 
-    private static DatabaseSeeder CreateSeeder(SighDbContext context, string? adminPassword, string adminEmail = AdminEmail)
+    /// <summary>
+    /// Seeder com o serviço real do primeiro administrador. <paramref name="adminPassword"/> é a chave antiga
+    /// Seed:AdminPassword: configurada ou não, é ignorada (ninguém conhece a senha do administrador).
+    /// </summary>
+    private static DatabaseSeeder CreateSeeder(SighDbContext context, string? adminPassword, string? adminEmail = AdminEmail, Mock<IAccountSetupLinkSender>? links = null)
     {
         var settings = new Dictionary<string, string?>
         {
@@ -32,8 +41,17 @@ public class DatabaseSeederTests
 
         var hasher = new Mock<IPasswordHasher>();
         hasher.Setup(h => h.HashPassword(It.IsAny<string>())).Returns<string>(p => $"hashed:{p}");
+        var random = new Mock<IRandomStringGenerator>();
+        random.Setup(r => r.GenerateRandomString(It.IsAny<int>())).Returns("aleatoria-que-ninguem-conhece");
+        var clock = new Mock<IDateTimeProvider>();
+        clock.SetupGet(c => c.UtcNow).Returns(() => DateTimeOffset.UtcNow);
 
-        return new DatabaseSeeder(context, hasher.Object, configuration, NullLogger<DatabaseSeeder>.Instance);
+        var provisioner = new CompanyAdminProvisioner(
+            context, hasher.Object, random.Object, clock.Object, (links ?? new Mock<IAccountSetupLinkSender>()).Object,
+            Mock.Of<ISecurityAuditLogger>(), Options.Create(new AuthOptions { AllowedEmailDomains = ["sigh.com.br"] }),
+            NullLogger<CompanyAdminProvisioner>.Instance);
+
+        return new DatabaseSeeder(context, hasher.Object, configuration, NullLogger<DatabaseSeeder>.Instance, provisioner);
     }
 
     [Fact]
@@ -41,8 +59,9 @@ public class DatabaseSeederTests
     {
         var dbName = Guid.NewGuid().ToString();
         await using var context = CreateContext(dbName);
+        var links = new Mock<IAccountSetupLinkSender>();
 
-        await CreateSeeder(context, "SenhaForte@123").SeedAsync();
+        await CreateSeeder(context, "SenhaForte@123", links: links).SeedAsync();
 
         context.Permissions.Select(p => p.Code).Should().BeEquivalentTo(PermissionCodes.All.Select(p => p.Code));
 
@@ -57,10 +76,22 @@ public class DatabaseSeederTests
 
         var admin = await context.Users.Include(u => u.UserRoles).SingleAsync();
         admin.Email.Should().Be(AdminEmail);
-        admin.PasswordHash.Should().Be("hashed:SenhaForte@123");
+        // A senha configurada (Seed:AdminPassword) é ignorada: a conta nasce com uma senha aleatória e o link.
+        admin.PasswordHash.Should().Be("hashed:aleatoria-que-ninguem-conhece");
         admin.MustChangePassword.Should().BeTrue();
         admin.Status.Should().Be(UserStatus.PendingFirstAccess);
-        admin.UserRoles.Should().ContainSingle(ur => ur.RoleId == role.Id);
+        admin.UserRoles.Should().ContainSingle(ur => ur.RoleId == role.Id && ur.CompanyId == DatabaseSeeder.DefaultCompanyId);
+        links.Verify(l => l.SendAdministratorAccessAsync(It.Is<User>(u => u.Email == AdminEmail), "Empresa Teste", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SeedAsync_EmailOutsideTheAllowedDomains_DoesNotCreateTheAdmin()
+    {
+        await using var context = CreateContext(Guid.NewGuid().ToString());
+
+        await CreateSeeder(context, adminPassword: null, adminEmail: "admin@gmail.com").SeedAsync();
+
+        (await context.Users.AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
@@ -98,12 +129,12 @@ public class DatabaseSeederTests
     }
 
     [Fact]
-    public async Task SeedAsync_WithoutAdminPassword_DoesNotCreateAdminButSeedsTheRest()
+    public async Task SeedAsync_WithoutAdminEmail_DoesNotCreateAdminButSeedsTheRest()
     {
         var dbName = Guid.NewGuid().ToString();
         await using var context = CreateContext(dbName);
 
-        await CreateSeeder(context, adminPassword: null).SeedAsync();
+        await CreateSeeder(context, adminPassword: null, adminEmail: null).SeedAsync();
 
         (await context.Users.AnyAsync()).Should().BeFalse();
         (await context.Permissions.CountAsync()).Should().Be(PermissionCodes.All.Count);
@@ -129,15 +160,30 @@ public class DatabaseSeederTests
     }
 
     [Fact]
-    public async Task Administrator_NeverRegistersNorApprovesMeasures()
+    public async Task Administrator_OnlyManagesAccess_AndNeverReadsEmployeeOrMeasureData()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
         await CreateSeeder(context, "SenhaForte@123").SeedAsync();
 
         var admin = await PermissionsOf(context, SystemRoles.Administrator);
-        admin.Should().NotContain(PermissionCodes.DisciplinaryRecords.Register);
-        admin.Should().NotContain(PermissionCodes.DisciplinaryRecords.Approve);
-        admin.Should().Contain([PermissionCodes.Users.ManageRoles, PermissionCodes.DisciplinaryRecords.ViewAll]);
+        admin.Should().BeEquivalentTo(
+        [
+            PermissionCodes.Users.View, PermissionCodes.Users.Create, PermissionCodes.Users.ChangeStatus,
+            PermissionCodes.Users.Unlock, PermissionCodes.Users.ManageRoles, PermissionCodes.ManagementUnits.Manage,
+            PermissionCodes.InfractionTypes.View, PermissionCodes.InfractionTypes.Create, PermissionCodes.InfractionTypes.Update,
+            PermissionCodes.InfractionTypes.Activate, PermissionCodes.InfractionTypes.Deactivate,
+            PermissionCodes.Audit.ViewAccess,
+            // Exceção decidida pelo cliente: o Administrador continua importando funcionários e histórico.
+            PermissionCodes.Employees.Import, PermissionCodes.DisciplinaryHistory.Import,
+        ]);
+        admin.Should().NotContain(
+        [
+            PermissionCodes.Employees.View, PermissionCodes.DisciplinaryRecords.View, PermissionCodes.DisciplinaryRecords.ViewAll,
+            PermissionCodes.DisciplinaryRecords.Register, PermissionCodes.DisciplinaryRecords.Approve,
+            PermissionCodes.DisciplinaryReports.ViewDashboard, PermissionCodes.DisciplinaryReports.ViewMeasures,
+            PermissionCodes.DisciplinaryReports.ViewEmployeeHistory, PermissionCodes.DisciplinaryReports.Export,
+            PermissionCodes.Audit.View, PermissionCodes.Notifications.View,
+        ]);
     }
 
     [Fact]
@@ -154,7 +200,7 @@ public class DatabaseSeederTests
     }
 
     [Fact]
-    public async Task OnlyTheManager_HasNoFullScope()
+    public async Task OnlyTheManagerAndTheAdministrator_HaveNoFullScope()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
         await CreateSeeder(context, "SenhaForte@123").SeedAsync();
@@ -163,7 +209,7 @@ public class DatabaseSeederTests
         {
             var permissions = await PermissionsOf(context, role.Name);
             permissions.Should().BeEquivalentTo(role.Permissions, $"o perfil {role.Name} fica exatamente com a lista fixa");
-            permissions.Contains(PermissionCodes.DisciplinaryRecords.ViewAll).Should().Be(role.Name != SystemRoles.Manager);
+            permissions.Contains(PermissionCodes.DisciplinaryRecords.ViewAll).Should().Be(role.Name is not (SystemRoles.Manager or SystemRoles.Administrator));
         }
     }
 

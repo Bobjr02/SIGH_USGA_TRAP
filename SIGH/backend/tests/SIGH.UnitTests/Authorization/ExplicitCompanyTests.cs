@@ -54,9 +54,10 @@ public class ExplicitCompanyTests
     {
         var service = new CreateUserService(
             new Mock<IApplicationDbContext>().Object, new Mock<IUserRepository>().Object, new Mock<IPasswordHasher>().Object,
-            Options.Create(new PasswordOptions()));
+            new Mock<SIGH.Application.Users.SetupLink.IAccountSetupLinkSender>().Object, new Mock<IRandomStringGenerator>().Object,
+            Options.Create(new AuthOptions { AllowedEmailDomains = ["sigh.test"] }));
 
-        var act = () => service.CreateUserAsync(new CreateUserRequest("NOME", "a@sigh.test", "52998224725", "Senha@Forte123", []));
+        var act = () => service.CreateUserAsync(new CreateUserRequest("NOME", "a@sigh.test", "52998224725", []));
 
         (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("Contexto de empresa");
     }

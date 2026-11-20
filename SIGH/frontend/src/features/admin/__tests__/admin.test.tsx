@@ -147,6 +147,7 @@ describe('administração de perfis', () => {
     server.use(
       refreshSucceeds(),
       meReturns(ADMIN),
+      http.get(`${API}/users/admin-status`, () => ok([])),
       http.get(`${API}/users`, () => ok({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0 })),
       http.get(`${API}/roles`, () => ok(ROLES)),
       http.get(`${API}/management-units`, () => ok(UNITS)),
@@ -173,7 +174,7 @@ describe('administração de perfis', () => {
     expect(submit).toBeEnabled();
     await user.click(submit);
 
-    await waitFor(() => expect(created).toMatchObject({ roleIds: ['r-man'], managementUnitIds: ['mu-131'], initialPassword: null }));
+    await waitFor(() => expect(created).toEqual({ fullName: 'Gil Gestor', email: 'gil@sigh.test', cpf: '52998224725', roleIds: ['r-man'], managementUnitIds: ['mu-131'] }));
     expect(await screen.findByText(/e-mail de definição de senha foi enviado/)).toBeInTheDocument();
   });
 
@@ -206,5 +207,130 @@ describe('validade', () => {
     expect(formatValidity(v.validFrom, v.validUntil)).toBe('de 01/12/2026 até 20/12/2026');
     expect(formatValidity(null, null)).toBe('sem prazo');
     expect(formatValidity(v.validFrom, null)).toBe('a partir de 01/12/2026');
+  });
+});
+
+describe('administrador sem acesso a dados e sem conhecer senhas', () => {
+  const emptyUsers = () => http.get(`${API}/users`, () => ok({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0 }));
+  const status = (over: Record<string, unknown>) => ({
+    companyCode: 'USGA',
+    companyName: 'Usina Serra Grande S.A.',
+    currentAdministrators: 2,
+    lastValidUntil: null,
+    singleAdministrator: false,
+    endingSoon: false,
+    ...over,
+  });
+
+  it('warns when the active company has a single current Administrator', async () => {
+    server.use(refreshSucceeds(), meReturns(ADMIN), emptyUsers(), http.get(`${API}/users/admin-status`, () => ok([status({ currentAdministrators: 1, singleAdministrator: true })])));
+
+    renderApp('/admin/usuarios');
+
+    expect(await screen.findByTestId('admin-alert')).toHaveTextContent('A Usina Serra Grande S.A. tem um só Administrador vigente.');
+  });
+
+  it('warns when the last Administrator ends in less than 15 days, showing the last day', async () => {
+    server.use(
+      refreshSucceeds(),
+      meReturns(ADMIN),
+      emptyUsers(),
+      http.get(`${API}/users/admin-status`, () => ok([status({ lastValidUntil: validityFromDates('', '2026-12-01').validUntil, endingSoon: true })])),
+    );
+
+    renderApp('/admin/usuarios');
+
+    expect(await screen.findByTestId('admin-alert')).toHaveTextContent('O acesso do último Administrador termina em 01/12/2026.');
+  });
+
+  it('shows no alert with two Administrators without an end date', async () => {
+    server.use(refreshSucceeds(), meReturns(ADMIN), emptyUsers(), http.get(`${API}/users/admin-status`, () => ok([status({})])));
+
+    renderApp('/admin/usuarios');
+
+    expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('admin-alert')).not.toBeInTheDocument());
+  });
+
+  it('the new user dialog has no password field and explains the 48-hour link', async () => {
+    server.use(
+      refreshSucceeds(),
+      meReturns(ADMIN),
+      emptyUsers(),
+      http.get(`${API}/users/admin-status`, () => ok([])),
+      http.get(`${API}/roles`, () => ok(ROLES)),
+      http.get(`${API}/management-units`, () => ok(UNITS)),
+    );
+
+    renderApp('/admin/usuarios');
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Novo usuário' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Novo usuário' });
+
+    expect(within(dialog).queryByLabelText(/senha/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId('setup-link-info')).toHaveTextContent('48 horas');
+    expect(within(dialog).getByText('E-mail corporativo (@usga.com.br).')).toBeInTheDocument();
+  });
+
+  it('resends the setup link of someone who has not defined the password yet', async () => {
+    let resent = 0;
+    server.use(
+      refreshSucceeds(),
+      meReturns(ADMIN),
+      http.get(`${API}/users/u-9`, () => ok({ ...userDetail('u-9', 'Pedro Pendente'), status: 'PendingFirstAccess', mustChangePassword: true })),
+      http.get(`${API}/users/u-9/access`, () => ok({ userId: 'u-9', roles: [], managementUnits: [] })),
+      http.get(`${API}/roles`, () => ok(ROLES)),
+      http.get(`${API}/management-units`, () => ok(UNITS)),
+      http.post(`${API}/users/u-9/setup-link`, () => {
+        resent++;
+        return ok({ userId: 'u-9', email: 'u-9@sigh.test', validHours: 48 });
+      }),
+    );
+
+    renderApp('/admin/usuarios/u-9');
+    await userEvent.setup().click(await screen.findByTestId('resend-setup-link'));
+
+    await waitFor(() => expect(resent).toBe(1));
+    expect(await screen.findByText(/Link de definição de senha reenviado para u-9@sigh.test. Ele vale por 48 horas/)).toBeInTheDocument();
+  });
+
+  it('an active user has no resend button', async () => {
+    server.use(
+      refreshSucceeds(),
+      meReturns(ADMIN),
+      http.get(`${API}/users/u-2`, () => ok(userDetail('u-2', 'Ana Ativa'))),
+      http.get(`${API}/users/u-2/access`, () => ok({ userId: 'u-2', roles: [], managementUnits: [] })),
+      http.get(`${API}/roles`, () => ok(ROLES)),
+      http.get(`${API}/management-units`, () => ok(UNITS)),
+    );
+
+    renderApp('/admin/usuarios/u-2');
+
+    expect(await screen.findByRole('heading', { name: 'Ana Ativa' })).toBeInTheDocument();
+    expect(screen.queryByTestId('resend-setup-link')).not.toBeInTheDocument();
+  });
+
+  it('the Administrator menu has no employee or measure screen', async () => {
+    const admin = makeUser({
+      roles: ['Administrator'],
+      permissions: [...ADMIN.permissions, PERMISSIONS.DISCIPLINARY_INFRACTION_TYPES_VIEW, PERMISSIONS.AUDIT_VIEW_ACCESS, PERMISSIONS.EMPLOYEES_IMPORT, PERMISSIONS.DISCIPLINARY_HISTORY_IMPORT],
+    });
+    server.use(refreshSucceeds(), meReturns(admin), emptyUsers(), http.get(`${API}/users/admin-status`, () => ok([])));
+
+    renderApp('/admin/usuarios');
+    await screen.findByRole('heading', { name: 'Usuários' });
+
+    const links = within(screen.getByRole('navigation', { name: 'Menu principal' }))
+      .getAllByRole('link')
+      .map((a) => a.textContent?.trim());
+    for (const hidden of ['Painel', 'Medidas', 'Funcionários', 'Relatórios', 'Aprovações', 'Registrar medida']) expect(links).not.toContain(hidden);
+    for (const shown of ['Auditoria', 'Usuários', 'Gerências', 'Motivos', 'Importar funcionários', 'Importar histórico']) expect(links).toContain(shown);
+  });
+
+  it('employee and measure routes show 403 to the Administrator', async () => {
+    server.use(refreshSucceeds(), meReturns(ADMIN));
+
+    renderApp('/employees');
+
+    expect(await screen.findByRole('heading', { name: /403/ })).toBeInTheDocument();
   });
 });

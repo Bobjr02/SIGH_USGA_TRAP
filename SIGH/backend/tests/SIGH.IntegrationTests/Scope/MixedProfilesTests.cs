@@ -36,7 +36,8 @@ public class MixedProfilesTests : IClassFixture<CustomWebApplicationFactory>
         Func<JsonElement, int>? Count = null,
         int ExpectedCount = 0,
         bool AllPages = false,
-        ManagerUnit? OnlyUnit = null);
+        ManagerUnit? OnlyUnit = null,
+        bool OtherCompanyAppears = true);
 
     /// <summary>Empresa em que o usuário é Gestor e a gerência dele: TODO item da lista daquela empresa é dessa gerência.</summary>
     public sealed record ManagerUnit(Guid CompanyId, string UnitCode);
@@ -138,23 +139,30 @@ public class MixedProfilesTests : IClassFixture<CustomWebApplicationFactory>
     };
 
     /// <summary>
-    /// Complementar: Administrador na USGA, Gestor da TRAP131 na Trapiche. O Administrador tem lotes, usuários,
-    /// gerências, motivos, auditoria e avisos na USGA; nada disso pode trazer a Trapiche.
+    /// Complementar: Administrador na USGA, Gestor da TRAP131 na Trapiche. O Administrador só gerencia ACESSOS: na USGA
+    /// tem lotes de importação, usuários, gerências, motivos e a auditoria de acesso, e NENHUM dado de funcionário ou de
+    /// medida (nem avisos, painel, relatórios, exportação ou auditoria de medidas). Da Trapiche, só o que o Gestor da
+    /// TRAP131 vê — e nada de administração da Trapiche.
     /// </summary>
     private static readonly Dictionary<string, Expectation> AdminUsgaManagerTrap = new(StringComparer.Ordinal)
     {
-        ["Medidas (lista)"] = new("/api/v1/disciplinary-records?pageSize=100", OnlyUnit: OnlyTrap131,
-            Sees: s => Ids(s.Usga131.Id, s.Usga132.Id, s.Trap131.Id), Hides: s => Ids(s.Trap132.Id)),
-        ["Relatórios (indicadores)"] = new("/api/v1/disciplinary-records/stats", Count: Total, ExpectedCount: 3),
+        ["Medidas (lista)"] = new("/api/v1/disciplinary-records?pageSize=100", OnlyUnit: OnlyTrap131, OtherCompanyAppears: false,
+            Sees: s => Ids(s.Trap131.Id), Hides: s => Ids(s.Usga131.Id, s.Usga132.Id, s.Trap132.Id)),
+        ["Medidas (detalhe, USGA132)"] = new("/api/v1/disciplinary-records/{Usga132}", HttpStatusCode.NotFound),
+        ["Medidas (filtros: gerências e setores)"] = new("/api/v1/disciplinary-records/options",
+            Sees: s => Ids(s.TrapUnit131), Hides: s => Ids(s.UsgaUnit131, s.UsgaUnit132, s.TrapUnit132)),
+        ["Anexo (download, USGA132)"] = new("/api/v1/disciplinary-cases/{Usga132}/evidences/{Usga132Evidence}/file", HttpStatusCode.NotFound),
+        ["Relatórios (indicadores)"] = new("/api/v1/disciplinary-records/stats", Count: Total, ExpectedCount: 1),
         ["Painel (visão geral)"] = new("/api/v1/disciplinary-records/overview",
-            Sees: s => Ids(s.Usga131.Id, s.Usga132.Id, s.Trap131.Id), Hides: s => Ids(s.Trap132.Id)),
+            Sees: s => Ids(s.Trap131.Id), Hides: s => Ids(s.Usga131.Id, s.Usga132.Id, s.Trap132.Id)),
         ["Exportação (CSV)"] = new("/api/v1/disciplinary-records/export",
-            Sees: _ => [S.EmployeeUsga131, S.EmployeeUsga132, S.EmployeeTrap131], Hides: _ => [S.EmployeeTrap132]),
-        ["Funcionários (lista)"] = new("/api/v1/employees?pageSize=100", AllPages: true, OnlyUnit: OnlyTrap131,
-            Sees: _ => [S.EmployeeUsga131, S.EmployeeUsga132, S.EmployeeTrap131], Hides: _ => Trap132Employees),
-        ["Avisos (lista)"] = new("/api/v1/notifications?pageSize=100",
-            Sees: _ => [S.NoticeUsgaGeneral, S.NoticeUsga132], Hides: s => [S.NoticeTrapGeneral, S.NoticeTrap131, S.NoticeTrap132, s.TrapName]),
-        ["Avisos (contador de não lidos)"] = new("/api/v1/notifications/unread/count", Count: Int, ExpectedCount: 2),
+            Sees: _ => [S.EmployeeTrap131], Hides: _ => [S.EmployeeUsga131, S.EmployeeUsga132, S.EmployeeTrap132]),
+        ["Funcionários (lista)"] = new("/api/v1/employees?pageSize=100", AllPages: true, OnlyUnit: OnlyTrap131, OtherCompanyAppears: false,
+            Sees: _ => [S.EmployeeTrap131], Hides: _ => [S.EmployeeUsga131, S.EmployeeUsga132, .. Trap132Employees]),
+        ["Funcionários (detalhe, USGA131)"] = new("/api/v1/employees/{Usga131Employee}", HttpStatusCode.NotFound),
+        ["Funcionários (histórico/apoio à decisão, USGA131)"] = new("/api/v1/employees/{Usga131Employee}/decision-support", HttpStatusCode.NotFound),
+        ["Avisos (lista)"] = Forbidden("/api/v1/notifications?pageSize=100"),
+        ["Avisos (contador de não lidos)"] = Forbidden("/api/v1/notifications/unread/count"),
 
         ["Lotes de importação de funcionários"] = new("/api/v1/employees/import/batches?pageSize=100",
             Sees: s => Ids(s.UsgaEmployeeBatch), Hides: s => [s.TrapEmployeeBatch.ToString(), s.TrapName]),
@@ -167,32 +175,44 @@ public class MixedProfilesTests : IClassFixture<CustomWebApplicationFactory>
         ["Usuários (detalhe, só da Trapiche)"] = new("/api/v1/users/{TrapRegistrarId}", HttpStatusCode.NotFound),
         ["Usuários (perfis e gerências de quem está nas duas)"] = new("/api/v1/users/{ManagerUsgaRegistrarTrapId}/access",
             Sees: s => Ids(s.UsgaUnit131, DatabaseSeeder.DefaultCompanyId), Hides: s => [DatabaseSeeder.TrapicheCompanyId.ToString(), s.TrapName]),
+        ["Usuários (situação dos administradores)"] = new("/api/v1/users/admin-status",
+            Sees: _ => [CompanyDefaults.UsgaCode], Hides: s => [CompanyDefaults.TrapicheCode, s.TrapName]),
         ["Gerências (administração)"] = new("/api/v1/management-units",
             Sees: s => Ids(s.UsgaUnit131, s.UsgaUnit132), Hides: s => Ids(s.TrapUnit131, s.TrapUnit132)),
         ["Motivos (catálogo)"] = new("/api/v1/infraction-types?pageSize=100",
             Sees: s => Ids(s.UsgaInfraction), Hides: s => Ids(s.TrapInfraction)),
-        ["Auditoria (trilha de uma medida da USGA)"] = new("/api/v1/audit-logs?pageSize=200&reference={Usga132Number}", Sees: s => Ids(s.Usga132.Id)),
-        ["Auditoria (trilha de uma medida da TRAP131)"] = new("/api/v1/audit-logs?pageSize=200&reference={Trap131Number}", Hides: s => Ids(s.Trap131.Id)),
-        ["Auditoria (seletor de usuários)"] = new("/api/v1/audit-logs/users?search=pm.so-",
+        ["Auditoria de acesso"] = new("/api/v1/audit-logs/access?pageSize=200",
+            Sees: s => Ids(s.UsgaRegistrarId),
+            Hides: s => Ids(s.TrapRegistrarId, s.Usga131.Id, s.Usga132.Id, s.Usga131.EmployeeId, s.Usga132.EmployeeId, s.Trap131.Id, s.Trap132.Id)),
+        ["Auditoria de acesso (seletor de usuários)"] = new("/api/v1/audit-logs/access/users?search=pm.so-",
             Sees: _ => [S.UsgaRegistrar], Hides: _ => [S.TrapAdmin, S.TrapRegistrar, S.TrapApprover]),
+        ["Auditoria (trilha geral, com medidas)"] = Forbidden("/api/v1/audit-logs?pageSize=200"),
+        ["Auditoria (trilha de uma medida da USGA)"] = Forbidden("/api/v1/audit-logs?pageSize=200&reference={Usga132Number}"),
+        ["Auditoria (linha do tempo de uma medida)"] = Forbidden("/api/v1/disciplinary-cases/{Usga132}/audit-trail"),
+        ["Auditoria (seletor de usuários da trilha geral)"] = Forbidden("/api/v1/audit-logs/users?search=pm.so-"),
         ["Pendentes de aprovação (contador)"] = Forbidden("/api/v1/disciplinary-records/pending-count"),
     };
 
     /// <summary>Complementar inverso: Gestor da USGA131 na USGA, Administrador na Trapiche.</summary>
     private static readonly Dictionary<string, Expectation> ManagerUsgaAdminTrap = new(StringComparer.Ordinal)
     {
-        ["Medidas (lista)"] = new("/api/v1/disciplinary-records?pageSize=100", OnlyUnit: OnlyUsga131,
-            Sees: s => Ids(s.Usga131.Id, s.Trap131.Id, s.Trap132.Id), Hides: s => Ids(s.Usga132.Id)),
-        ["Relatórios (indicadores)"] = new("/api/v1/disciplinary-records/stats", Count: Total, ExpectedCount: 3),
+        ["Medidas (lista)"] = new("/api/v1/disciplinary-records?pageSize=100", OnlyUnit: OnlyUsga131, OtherCompanyAppears: false,
+            Sees: s => Ids(s.Usga131.Id), Hides: s => Ids(s.Usga132.Id, s.Trap131.Id, s.Trap132.Id)),
+        ["Medidas (detalhe, TRAP132)"] = new("/api/v1/disciplinary-records/{Trap132}", HttpStatusCode.NotFound),
+        ["Medidas (filtros: gerências e setores)"] = new("/api/v1/disciplinary-records/options",
+            Sees: s => Ids(s.UsgaUnit131), Hides: s => Ids(s.UsgaUnit132, s.TrapUnit131, s.TrapUnit132)),
+        ["Anexo (download, TRAP132)"] = new("/api/v1/disciplinary-cases/{Trap132}/evidences/{Trap132Evidence}/file", HttpStatusCode.NotFound),
+        ["Relatórios (indicadores)"] = new("/api/v1/disciplinary-records/stats", Count: Total, ExpectedCount: 1),
         ["Painel (visão geral)"] = new("/api/v1/disciplinary-records/overview",
-            Sees: s => Ids(s.Usga131.Id, s.Trap131.Id, s.Trap132.Id), Hides: s => Ids(s.Usga132.Id)),
+            Sees: s => Ids(s.Usga131.Id), Hides: s => Ids(s.Usga132.Id, s.Trap131.Id, s.Trap132.Id)),
         ["Exportação (CSV)"] = new("/api/v1/disciplinary-records/export",
-            Sees: _ => [S.EmployeeUsga131, S.EmployeeTrap131, S.EmployeeTrap132], Hides: _ => [S.EmployeeUsga132]),
-        ["Funcionários (lista)"] = new("/api/v1/employees?pageSize=100", AllPages: true, OnlyUnit: OnlyUsga131,
-            Sees: _ => [S.EmployeeUsga131, S.EmployeeTrap131, S.EmployeeTrap132], Hides: _ => [S.EmployeeUsga132]),
-        ["Avisos (lista)"] = new("/api/v1/notifications?pageSize=100",
-            Sees: _ => [S.NoticeTrapGeneral, S.NoticeTrap131, S.NoticeTrap132], Hides: s => [S.NoticeUsgaGeneral, S.NoticeUsga132, s.UsgaName]),
-        ["Avisos (contador de não lidos)"] = new("/api/v1/notifications/unread/count", Count: Int, ExpectedCount: 3),
+            Sees: _ => [S.EmployeeUsga131], Hides: _ => [S.EmployeeUsga132, S.EmployeeTrap131, S.EmployeeTrap132]),
+        ["Funcionários (lista)"] = new("/api/v1/employees?pageSize=100", AllPages: true, OnlyUnit: OnlyUsga131, OtherCompanyAppears: false,
+            Sees: _ => [S.EmployeeUsga131], Hides: _ => [S.EmployeeUsga132, S.EmployeeTrap131, .. Trap132Employees]),
+        ["Funcionários (detalhe, TRAP131)"] = new("/api/v1/employees/{Trap131Employee}", HttpStatusCode.NotFound),
+        ["Funcionários (histórico/apoio à decisão, TRAP131)"] = new("/api/v1/employees/{Trap131Employee}/decision-support", HttpStatusCode.NotFound),
+        ["Avisos (lista)"] = Forbidden("/api/v1/notifications?pageSize=100"),
+        ["Avisos (contador de não lidos)"] = Forbidden("/api/v1/notifications/unread/count"),
 
         ["Lotes de importação de funcionários"] = new("/api/v1/employees/import/batches?pageSize=100",
             Sees: s => Ids(s.TrapEmployeeBatch), Hides: s => [s.UsgaEmployeeBatch.ToString(), s.UsgaName]),
@@ -205,14 +225,21 @@ public class MixedProfilesTests : IClassFixture<CustomWebApplicationFactory>
         ["Usuários (detalhe, só da USGA)"] = new("/api/v1/users/{UsgaRegistrarId}", HttpStatusCode.NotFound),
         ["Usuários (perfis e gerências de quem está nas duas)"] = new("/api/v1/users/{RegistrarUsgaManagerTrapId}/access",
             Sees: s => Ids(s.TrapUnit131, DatabaseSeeder.TrapicheCompanyId), Hides: s => [DatabaseSeeder.DefaultCompanyId.ToString(), s.UsgaName]),
+        ["Usuários (situação dos administradores)"] = new("/api/v1/users/admin-status",
+            Sees: _ => [CompanyDefaults.TrapicheCode], Hides: s => [CompanyDefaults.UsgaCode, s.UsgaName]),
         ["Gerências (administração)"] = new("/api/v1/management-units",
             Sees: s => Ids(s.TrapUnit131, s.TrapUnit132), Hides: s => Ids(s.UsgaUnit131, s.UsgaUnit132)),
         ["Motivos (catálogo)"] = new("/api/v1/infraction-types?pageSize=100",
             Sees: s => Ids(s.TrapInfraction), Hides: s => Ids(s.UsgaInfraction)),
-        ["Auditoria (trilha de uma medida da Trapiche)"] = new("/api/v1/audit-logs?pageSize=200&reference={Trap132Number}", Sees: s => Ids(s.Trap132.Id)),
-        ["Auditoria (trilha de uma medida da USGA131)"] = new("/api/v1/audit-logs?pageSize=200&reference={Usga131Number}", Hides: s => Ids(s.Usga131.Id)),
-        ["Auditoria (seletor de usuários)"] = new("/api/v1/audit-logs/users?search=pm.so-",
+        ["Auditoria de acesso"] = new("/api/v1/audit-logs/access?pageSize=200",
+            Sees: s => Ids(s.TrapRegistrarId),
+            Hides: s => Ids(s.UsgaRegistrarId, s.Trap131.Id, s.Trap132.Id, s.Trap131.EmployeeId, s.Trap132.EmployeeId, s.Usga131.Id, s.Usga132.Id)),
+        ["Auditoria de acesso (seletor de usuários)"] = new("/api/v1/audit-logs/access/users?search=pm.so-",
             Sees: _ => [S.TrapRegistrar], Hides: _ => [S.UsgaRegistrar, S.UsgaApprover]),
+        ["Auditoria (trilha geral, com medidas)"] = Forbidden("/api/v1/audit-logs?pageSize=200"),
+        ["Auditoria (trilha de uma medida da Trapiche)"] = Forbidden("/api/v1/audit-logs?pageSize=200&reference={Trap132Number}"),
+        ["Auditoria (linha do tempo de uma medida)"] = Forbidden("/api/v1/disciplinary-cases/{Trap132}/audit-trail"),
+        ["Auditoria (seletor de usuários da trilha geral)"] = Forbidden("/api/v1/audit-logs/users?search=pm.so-"),
         ["Pendentes de aprovação (contador)"] = Forbidden("/api/v1/disciplinary-records/pending-count"),
     };
 
@@ -286,8 +313,12 @@ public class MixedProfilesTests : IClassFixture<CustomWebApplicationFactory>
             ofManagerCompany.Should().NotBeEmpty($"{listing} para {user}: a gerência {only.UnitCode} tem itens");
             ofManagerCompany.Select(i => i.GetProperty("managementUnitCode").GetString()).Distinct().Should()
                 .Equal([only.UnitCode], $"{listing} para {user}: na empresa em que é Gestor, só a gerência {only.UnitCode}");
-            items.Should().Contain(i => i.GetProperty("companyId").GetGuid() != only.CompanyId,
-                $"{listing} para {user}: a outra empresa (perfil com escopo total) também aparece");
+            if (expected.OtherCompanyAppears)
+                items.Should().Contain(i => i.GetProperty("companyId").GetGuid() != only.CompanyId,
+                    $"{listing} para {user}: a outra empresa (perfil com escopo total) também aparece");
+            else
+                items.Should().OnlyContain(i => i.GetProperty("companyId").GetGuid() == only.CompanyId,
+                    $"{listing} para {user}: na empresa em que é Administrador não há dado de funcionário nem de medida");
         }
     }
 
@@ -307,6 +338,9 @@ public class MixedProfilesTests : IClassFixture<CustomWebApplicationFactory>
         async Task<(HashSet<string> Ids, int Total)> ReadAsync(string company)
         {
             using var client = await AccessTestHelpers.LoginAsync(_factory, user, company);
+            // Empresa em que a pessoa é só Administrador: nenhuma medida (403), que conta como vazio.
+            if ((await client.GetAsync("/api/v1/disciplinary-records?pageSize=1")).StatusCode == HttpStatusCode.Forbidden)
+                return ([], 0);
             var list = JsonDocument.Parse(await client.GetStringAsync("/api/v1/disciplinary-records?pageSize=100")).RootElement.GetProperty("data");
             var stats = JsonDocument.Parse(await client.GetStringAsync("/api/v1/disciplinary-records/stats")).RootElement.GetProperty("data");
             return (list.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetString()!).ToHashSet(), Total(stats));

@@ -24,7 +24,11 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
     /// <summary>Senha dos usuários de fixture (admin, approver, locked, unprivileged).</summary>
     public const string DefaultPassword = "Admin@123456";
 
-    /// <summary>Administrador criado pelo DatabaseSeeder real: troca de senha obrigatória.</summary>
+    /// <summary>
+    /// Primeiro administrador da USGA, criado pelo DatabaseSeeder real (Seed:AdminEmail): sem senha conhecida, recebe o
+    /// link de definição por e-mail. <see cref="SeedAdminPassword"/> só vale depois de
+    /// <see cref="GiveSeedAdminLegacyPasswordAsync"/> (conta de banco antigo, criada com senha e troca obrigatória).
+    /// </summary>
     public const string SeedAdminEmail = "seed.admin@sigh.test";
     public const string SeedAdminPassword = "Seed@Admin2026!";
 
@@ -90,7 +94,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 ["JwtOptions:Audience"] = "SIGH.Client.IntegrationTests",
                 ["JwtOptions:ExpiryInMinutes"] = "60",
                 ["Seed:AdminEmail"] = SeedAdminEmail,
-                ["Seed:AdminPassword"] = SeedAdminPassword,
+                // Domínios fictícios dos testes, além do @usga.com.br do appsettings.json (índice 0).
+                ["Auth:AllowedEmailDomains:1"] = "sigh.com",
+                ["Auth:AllowedEmailDomains:2"] = "sigh.test",
+                ["Auth:AllowedEmailDomains:3"] = "demo.local",
                 ["Seed:DefaultCompanyName"] = "Empresa Padrão (Testes)",
                 // O schema é criado uma vez por execução em SqlServerTestDatabase.
                 ["Database:ApplyMigrationsOnStartup"] = "false",
@@ -127,6 +134,21 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         _fixturePasswordHash ??= passwordHasher.HashPassword(DefaultPassword);
 
         await SeedFixtureUsersAsync(db, _fixturePasswordHash);
+    }
+
+    /// <summary>
+    /// Simula o administrador de um banco ANTIGO: o seed de antes criava a conta com Seed:AdminPassword e troca de senha
+    /// obrigatória. Usado pelos testes da troca obrigatória, que continua valendo para essas contas.
+    /// </summary>
+    public async Task GiveSeedAdminLegacyPasswordAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
+        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var admin = await db.Users.SingleAsync(u => u.Email == SeedAdminEmail);
+        admin.PasswordHash = hasher.HashPassword(SeedAdminPassword);
+        admin.MustChangePassword = true;
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

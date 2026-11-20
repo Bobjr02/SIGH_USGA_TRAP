@@ -145,4 +145,48 @@ describe('/audit page', () => {
     expect(last.get('action')).toBe('SoftDeleted');
     expect(last.has('entityId')).toBe(false);
   });
+
+  it('the Administrator (Audit.ViewAccess only) sees the access audit: other endpoint, no measure or employee search', async () => {
+    const queries: string[] = [];
+    let fullTrailCalled = false;
+    const roleAssigned: AuditLogDto = {
+      id: 'a9',
+      createdAt: '2026-11-12T14:00:00Z',
+      action: 'Security.RoleAssigned',
+      entity: 'User',
+      entityId: 'u-2',
+      userName: 'Ada Admin',
+      newValues: '{"role":"HrRegistrar"}',
+    };
+    server.use(
+      refreshSucceeds(),
+      meReturns(makeUser({ roles: ['Administrator'], permissions: [PERMISSIONS.USERS_VIEW, PERMISSIONS.AUDIT_VIEW_ACCESS] })),
+      http.get('/api/v1/audit-logs/access', ({ request }) => {
+        queries.push(request.url);
+        return HttpResponse.json(page([roleAssigned]));
+      }),
+      http.get('/api/v1/audit-logs/access/users', () => HttpResponse.json({ success: true, data: [] })),
+      http.get('/api/v1/audit-logs', () => {
+        fullTrailCalled = true;
+        return HttpResponse.json(page([]));
+      }),
+    );
+
+    renderApp('/audit');
+
+    expect(await screen.findByRole('heading', { name: 'Auditoria de acesso' })).toBeInTheDocument();
+    expect(within(screen.getByRole('navigation', { name: 'Menu principal' })).getByRole('link', { name: /auditoria/i })).toBeInTheDocument();
+    expect(await screen.findByText('Perfil atribuído')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Medida ou matrícula')).not.toBeInTheDocument();
+    expect(queries.length).toBeGreaterThan(0);
+    expect(fullTrailCalled).toBe(false);
+
+    // Só os registros de acesso no filtro "Registro": nada de medida nem de funcionário.
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Registro'));
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
+    expect(options).toContain('Usuário');
+    expect(options).not.toContain('Medida');
+    expect(options).not.toContain('Funcionário');
+  });
 });

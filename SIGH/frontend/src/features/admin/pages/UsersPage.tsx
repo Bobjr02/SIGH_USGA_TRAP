@@ -27,7 +27,16 @@ import { formatDateTime } from '../../../utils/formatters';
 import { useAuth } from '../../../hooks/useAuth';
 import { PERMISSIONS } from '../../../auth/permissions';
 import { recordErrorMessage } from '../../records/api/recordsApi';
-import { adminApi, adminKeys, USER_EXISTS_IN_ANOTHER_COMPANY, USER_STATUS_LABELS, type RoleOption, type UserSummary } from '../api/adminApi';
+import {
+  adminApi,
+  adminKeys,
+  formatValidity,
+  USER_EXISTS_IN_ANOTHER_COMPANY,
+  USER_STATUS_LABELS,
+  type AdministratorStatus,
+  type RoleOption,
+  type UserSummary,
+} from '../api/adminApi';
 
 const MANAGER = 'Manager';
 
@@ -90,6 +99,7 @@ const CreateUserDialog: React.FC<{ open: boolean; onClose: () => void }> = ({ op
           label="E-mail"
           type="email"
           required
+          helperText="E-mail corporativo (@usga.com.br)."
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
@@ -129,7 +139,10 @@ const CreateUserDialog: React.FC<{ open: boolean; onClose: () => void }> = ({ op
             perfis marcados acima, sem criar outra conta. Os perfis que a pessoa tem na outra empresa não mudam e não aparecem aqui.
           </Alert>
         ) : (
-          <Alert severity="info">O usuário recebe por e-mail um link para definir a própria senha.</Alert>
+          <Alert severity="info" data-testid="setup-link-info">
+            Não há senha para preencher: a pessoa recebe por e-mail um link para definir a própria senha (uso único, válido por 48 horas).
+            Ninguém, nem o administrador, conhece a senha. Se o link vencer, reenvie pela tela do usuário.
+          </Alert>
         )}
         {error && <Alert severity="error">{error}</Alert>}
       </DialogContent>
@@ -146,6 +159,36 @@ const CreateUserDialog: React.FC<{ open: boolean; onClose: () => void }> = ({ op
         )}
       </DialogActions>
     </Dialog>
+  );
+};
+
+/** Texto do alerta de uma empresa (nulo se não há o que avisar). */
+export const administratorAlert = (s: AdministratorStatus): string | null => {
+  const parts: string[] = [];
+  if (s.currentAdministrators === 0) parts.push(`A ${s.companyName} não tem nenhum Administrador vigente.`);
+  else if (s.singleAdministrator) parts.push(`A ${s.companyName} tem um só Administrador vigente.`);
+  if (s.endingSoon && s.lastValidUntil) {
+    const until = formatValidity(null, s.lastValidUntil).replace(/^até /, '');
+    parts.push(`O acesso do último Administrador termina em ${until}.`);
+  }
+  if (parts.length === 0) return null;
+  parts.push('Atribua o perfil Administrador a mais uma pessoa (ou prorrogue a validade) para a empresa não ficar sem administração.');
+  return parts.join(' ');
+};
+
+/** Alerta de administrador único, ou do último com o acesso terminando em menos de 15 dias. */
+const AdministratorAlerts: React.FC = () => {
+  const status = useQuery({ queryKey: adminKeys.adminStatus, queryFn: adminApi.administratorStatus });
+  const alerts = (status.data ?? []).map((s) => ({ code: s.companyCode, text: administratorAlert(s) })).filter((a) => a.text);
+  if (alerts.length === 0) return null;
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      {alerts.map((a) => (
+        <Alert key={a.code} severity="warning" data-testid="admin-alert">
+          {a.text}
+        </Alert>
+      ))}
+    </div>
   );
 };
 
@@ -177,6 +220,7 @@ export const UsersPage: React.FC = () => {
           )
         }
       />
+      <AdministratorAlerts />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <TextField
           size="small"

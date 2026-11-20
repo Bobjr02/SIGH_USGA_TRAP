@@ -288,7 +288,6 @@ public sealed class DemoDataSeeder
             var id = await UserIdAsync(email, ct) ?? Guid.Empty;
             if (id == Guid.Empty)
             {
-                var initialPassword = RandomPassword();
                 await RunAsAsync(adminId, user.Company, async sp =>
                 {
                     var db = sp.GetRequiredService<SighDbContext>();
@@ -296,13 +295,20 @@ public sealed class DemoDataSeeder
                     var roles = await db.Roles.Where(r => user.Roles.Contains(r.Name)).Select(r => r.Id).ToListAsync(ct);
                     var units = await db.ManagementUnits.Where(m => m.CompanyId == companyId && user.Units.Contains(m.Code!)).Select(m => m.Id).ToListAsync(ct);
                     var created = await sp.GetRequiredService<ICreateUserService>()
-                        .CreateUserAsync(new CreateUserRequest(user.FullName, email, user.Cpf, initialPassword, roles, units), ct);
+                        .CreateUserAsync(new CreateUserRequest(user.FullName, email, user.Cpf, roles, units), ct);
                     id = created.Id;
                 });
 
-                // O próprio usuário "faz o primeiro acesso": troca a senha inicial pela senha de demonstração.
+                // A própria pessoa "usa o link do e-mail": define a senha de demonstração pela redefinição real
+                // (o administrador não define senha de ninguém). Um link novo substitui o do e-mail de conta criada.
                 await RunAsAsync(id, user.Company, async sp =>
-                    await sp.GetRequiredService<IChangePasswordService>().ChangePasswordAsync(new ChangePasswordRequest(id, initialPassword, _options.DemoPassword!), ct));
+                {
+                    var tokens = sp.GetRequiredService<SIGH.Application.Authentication.PasswordTokens.IPasswordTokenService>();
+                    var raw = await tokens.IssueAsync(id, SIGH.Domain.Entities.PasswordTokenPurpose.AccountSetup, ct);
+                    await sp.GetRequiredService<SighDbContext>().SaveChangesAsync(ct);
+                    await sp.GetRequiredService<SIGH.Application.Authentication.ResetPassword.IResetPasswordService>()
+                        .ResetPasswordAsync(new SIGH.Application.Authentication.ResetPassword.ResetPasswordRequest(raw, _options.DemoPassword!), ct);
+                });
                 _logger.LogInformation("Demo: usuário {Email} criado na {Company}.", email, user.Company);
             }
 
@@ -463,7 +469,6 @@ public sealed class DemoDataSeeder
             : throw new InvalidOperationException("Seed:DemoDataPath não configurado (pasta SIGH/docs/referencias).");
 
     /// <summary>Senha inicial aleatória (descartada: o usuário troca logo em seguida).</summary>
-    private static string RandomPassword() => $"Ini#{Convert.ToHexString(RandomNumberGenerator.GetBytes(12))}a";
 
     public static string SyntheticCpf(string base9)
     {

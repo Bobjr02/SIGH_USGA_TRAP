@@ -147,8 +147,8 @@ public class DisciplinaryRecordsTests : IntegrationTestBase
         (await admin.PostAsync($"/api/v1/disciplinary-records/{record.Summary.Id}/approve", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await admin.PostAsJsonAsync("/api/v1/disciplinary-records", ReferenceData.Warning(_employee, _infraction, _today.AddDays(-1))))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden, "o Administrador não registra medidas");
-        var adminView = (await admin.GetFromJsonAsync<Result<RecordDetailDto>>($"/api/v1/disciplinary-records/{record.Summary.Id}"))!.Data!;
-        adminView.Actions.CanApprove.Should().BeFalse();
+        (await admin.GetAsync($"/api/v1/disciplinary-records/{record.Summary.Id}"))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden, "o Administrador nem consulta medidas");
     }
 
     [Fact]

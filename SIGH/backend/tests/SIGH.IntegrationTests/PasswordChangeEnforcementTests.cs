@@ -16,7 +16,7 @@ using Xunit;
 namespace SIGH.IntegrationTests;
 
 /// <summary>
-/// O administrador criado pelo DatabaseSeeder nasce com MustChangePassword = true:
+/// Conta com MustChangePassword = true (o administrador de um banco antigo, criado com senha pelo seed de antes):
 /// até trocar a senha, só change-password, logout e refresh podem ser usados.
 /// </summary>
 public class PasswordChangeEnforcementTests : IntegrationTestBase
@@ -26,6 +26,12 @@ public class PasswordChangeEnforcementTests : IntegrationTestBase
     public PasswordChangeEnforcementTests(CustomWebApplicationFactory factory)
         : base(factory)
     {
+    }
+
+    public override async Task InitializeAsync()
+    {
+        await base.InitializeAsync();
+        await Factory.GiveSeedAdminLegacyPasswordAsync();
     }
 
     [Fact]

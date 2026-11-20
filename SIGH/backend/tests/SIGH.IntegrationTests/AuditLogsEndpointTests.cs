@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -26,17 +27,56 @@ public class AuditLogsEndpointTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task SeededAdministratorRole_HasAuditView()
+    public async Task SeededAdministratorRole_HasOnlyTheAccessAudit_AndLegalTheFullTrail()
     {
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
 
-        var granted = await db.RolePermissions
+        var admin = await db.RolePermissions
             .Where(rp => rp.Role.Name == DatabaseSeeder.AdministratorRoleName)
             .Select(rp => rp.Permission.Code)
             .ToListAsync();
+        var legal = await db.RolePermissions
+            .Where(rp => rp.Role.Name == SystemRoles.Legal)
+            .Select(rp => rp.Permission.Code)
+            .ToListAsync();
 
-        granted.Should().Contain(PermissionCodes.Audit.View);
+        admin.Should().Contain(PermissionCodes.Audit.ViewAccess).And.NotContain(PermissionCodes.Audit.View);
+        legal.Should().Contain(PermissionCodes.Audit.View).And.NotContain(PermissionCodes.Audit.ViewAccess);
+    }
+
+    /// <summary>
+    /// A auditoria de ACESSO traz perfis atribuídos e eventos de segurança, e nunca medidas, funcionários, anexos ou
+    /// importações — mesmo que eles estejam na trilha completa.
+    /// </summary>
+    [Fact]
+    public async Task AccessAudit_HasProfilesAndSecurityEvents_ButNoEmployeeOrMeasureEntries()
+    {
+        var admin = await AccessTestHelpers.CreateUserAsync(Factory, "audit.acesso.admin@sigh.test", SystemRoles.Administrator);
+        await AccessTestHelpers.CreateUserAsync(Factory, "audit.acesso.alvo@sigh.test", SystemRoles.HrRegistrar);
+        await using (var scope = Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
+            foreach (var entity in new[] { "Employee", "DisciplinaryCase", "DisciplinaryEvidence", "DisciplinaryMeasure", "HistoryImportState" })
+                db.AuditLogs.Add(new SIGH.Domain.Entities.AuditLog { CompanyId = DatabaseSeeder.DefaultCompanyId, Action = "Created", Entity = entity, EntityId = Guid.NewGuid().ToString() });
+            db.AuditLogs.Add(new SIGH.Domain.Entities.AuditLog
+            {
+                CompanyId = DatabaseSeeder.DefaultCompanyId, Action = SIGH.Application.Security.SecurityAuditActions.EvidenceDownloaded, Entity = "User", EntityId = Guid.NewGuid().ToString()
+            });
+            await db.SaveChangesAsync();
+        }
+        using var client = await AccessTestHelpers.LoginAsync(Factory, admin.Email, CompanyDefaults.UsgaCode);
+
+        var body = JsonDocument.Parse(await client.GetStringAsync("/api/v1/audit-logs/access?pageSize=200")).RootElement.GetProperty("data");
+        var items = body.GetProperty("items").EnumerateArray().ToList();
+
+        items.Select(i => i.GetProperty("entity").GetString()).Should().OnlyContain(e => SIGH.Application.Audit.AccessAuditPolicy.Entities.Contains(e!));
+        items.Should().NotContain(i => i.GetProperty("action").GetString() == SIGH.Application.Security.SecurityAuditActions.EvidenceDownloaded);
+        items.Should().Contain(i => i.GetProperty("entity").GetString() == "UserRole");
+        items.Should().Contain(i => i.GetProperty("action").GetString() == SIGH.Application.Security.SecurityAuditActions.LoginSucceeded,
+            "o login do próprio administrador (evento sem empresa, de uma pessoa da USGA)");
+
+        (await client.GetAsync("/api/v1/audit-logs?pageSize=200")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

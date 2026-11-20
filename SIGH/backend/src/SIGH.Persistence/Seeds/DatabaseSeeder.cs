@@ -9,7 +9,8 @@ namespace SIGH.Persistence.Seeds;
 
 /// <summary>
 /// Seed idempotente dos dados mínimos para o sistema funcionar num banco novo:
-/// catálogo de permissões, perfis de sistema (<see cref="SystemRoles"/>), empresa padrão e usuário administrador.
+/// catálogo de permissões, perfis de sistema (<see cref="SystemRoles"/>), empresas e o primeiro administrador de cada
+/// empresa (sem senha: link de definição por e-mail, via <see cref="SIGH.Application.Users.Bootstrap.ICompanyAdminProvisioner"/>).
 /// Pode ser executado a cada inicialização: só insere o que estiver faltando, e as permissões de cada
 /// perfil de sistema são sincronizadas com a lista fixa (o que sobrar é retirado logicamente).
 /// </summary>
@@ -29,52 +30,52 @@ public sealed class DatabaseSeeder
     private const string TrapicheDisplayName = "Trapiche";
     // Nome antigo do seed: renomeado automaticamente para o nome configurado.
     private const string LegacyCompanyName = "Empresa Padrão";
-    private const string AdminFullName = "Administrador do Sistema";
-    private const string AdminCpf = "00000000000";
 
     private readonly SighDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DatabaseSeeder> _logger;
+    private readonly SIGH.Application.Users.Bootstrap.ICompanyAdminProvisioner? _companyAdmins;
 
     public DatabaseSeeder(
         SighDbContext context,
         IPasswordHasher passwordHasher,
         IConfiguration configuration,
-        ILogger<DatabaseSeeder> logger)
+        ILogger<DatabaseSeeder> logger,
+        SIGH.Application.Users.Bootstrap.ICompanyAdminProvisioner? companyAdmins = null)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _configuration = configuration;
         _logger = logger;
+        _companyAdmins = companyAdmins;
     }
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         var permissions = await EnsurePermissionsAsync(cancellationToken);
-        var roles = await EnsureSystemRolesAsync(permissions, cancellationToken);
-        var adminRole = roles[SystemRoles.Administrator];
+        await EnsureSystemRolesAsync(permissions, cancellationToken);
         await EnsureDefaultCompanyAsync(cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
-        var companies = await EnsureConfiguredCompaniesAsync(cancellationToken);
+        await EnsureConfiguredCompaniesAsync(cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
         await EnsureManagementUnitsAsync(cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await EnsureAdminUserAsync(adminRole, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        foreach (var company in companies)
-        {
-            await EnsureCompanyAdminAsync(company, adminRole, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-        }
+        // Primeiro administrador de cada empresa (Seed:CompanyAdmins e as chaves antigas Seed:AdminEmail e
+        // Seed:Companies:<código>:AdminEmail): só para empresa SEM Administrador vigente, com link de definição de
+        // senha por e-mail. Bancos que já têm administrador não mudam.
+        if (_companyAdmins is not null)
+            await _companyAdmins.ProvisionMissingAsync(
+                SIGH.Application.Users.Bootstrap.CompanyAdminProvisioner.ReadConfiguration(_configuration, _logger), cancellationToken);
+        else if (_configuration["Seed:AdminEmail"] is { Length: > 0 })
+            _logger.LogWarning("Seed: sem o serviço de primeiro administrador; nenhum administrador foi criado.");
     }
 
     /// <summary>
-    /// Empresas de Seed:Companies:&lt;código&gt; (Name, ManagementUnitPrefix, AdminEmail; a senha do administrador em
-    /// Seed:Companies:&lt;código&gt;:AdminPassword, só por user-secrets ou variável de ambiente). USGA usa o Id antigo da
+    /// Empresas de Seed:Companies:&lt;código&gt; (Name, ManagementUnitPrefix; o primeiro administrador vem de
+    /// Seed:CompanyAdmins ou de Seed:Companies:&lt;código&gt;:AdminEmail). USGA usa o Id antigo da
     /// empresa padrão; TRAP, o Id fixo da Trapiche. Só cria o que falta: o nome de exibição continua editável no banco
     /// (nenhum nome jurídico é inventado). Não há tela para criar empresas nesta versão.
     /// </summary>
@@ -116,75 +117,6 @@ public sealed class DatabaseSeeder
             result.Add((company, section));
         }
         return result;
-    }
-
-    /// <summary>
-    /// Primeiro administrador da empresa (Seed:Companies:&lt;código&gt;:AdminEmail + AdminPassword), com troca de senha
-    /// obrigatória. Se o e-mail já existe (a mesma pessoa administra outra empresa) e a empresa ainda não tem
-    /// administrador, só recebe o perfil Administrador nela. Nunca mexe numa empresa que já tem administrador.
-    /// </summary>
-    private async Task EnsureCompanyAdminAsync((Company Company, IConfigurationSection Section) entry, Role adminRole, CancellationToken cancellationToken)
-    {
-        var (company, section) = entry;
-        var email = section["AdminEmail"]?.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(email))
-            return;
-
-        var hasAdmin = await _context.UserRoles.IgnoreQueryFilters()
-            .AnyAsync(ur => ur.CompanyId == company.Id && ur.RoleId == adminRole.Id, cancellationToken);
-        if (hasAdmin)
-            return;
-
-        var existing = await _context.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
-        if (existing is not null)
-        {
-            await _context.UserRoles.AddAsync(new UserRole { UserId = existing.Id, RoleId = adminRole.Id, CompanyId = company.Id }, cancellationToken);
-            existing.RotateSecurityStamp();
-            _logger.LogInformation("Seed: {Email} recebeu o perfil Administrador na empresa {Code}.", email, company.Code);
-            return;
-        }
-
-        var password = section["AdminPassword"];
-        if (string.IsNullOrWhiteSpace(password) && company.Id == DefaultCompanyId)
-            password = _configuration["Seed:AdminPassword"];
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            _logger.LogWarning(
-                "Seed: a senha do administrador da empresa {Code} não foi configurada (Seed:Companies:{Code}:AdminPassword). " +
-                "O administrador {Email} NÃO foi criado.", company.Code, company.Code, email);
-            return;
-        }
-
-        var passwordHash = _passwordHasher.HashPassword(password);
-        var admin = new User
-        {
-            FullName = $"{AdminFullName} ({company.Code})",
-            Email = email,
-            Cpf = await SeedAdminCpfAsync(company, cancellationToken),
-            PasswordHash = passwordHash,
-            Status = UserStatus.PendingFirstAccess,
-            MustChangePassword = true,
-            FailedLoginAttempts = 0,
-            CreatedInCompanyId = company.Id
-        };
-        admin.UserRoles.Add(new UserRole { UserId = admin.Id, RoleId = adminRole.Id, CompanyId = company.Id });
-        admin.PasswordHistories.Add(new PasswordHistory { UserId = admin.Id, PasswordHash = passwordHash });
-        await _context.Users.AddAsync(admin, cancellationToken);
-        _logger.LogInformation("Seed: administrador {Email} da empresa {Code} criado (troca de senha obrigatória).", email, company.Code);
-    }
-
-    /// <summary>CPF técnico (não é de pessoa) do administrador do seed: único por empresa.</summary>
-    private async Task<string> SeedAdminCpfAsync(Company company, CancellationToken cancellationToken)
-    {
-        if (company.Id == DefaultCompanyId && !await _context.Users.IgnoreQueryFilters().AnyAsync(u => u.Cpf == AdminCpf, cancellationToken))
-            return AdminCpf;
-        for (var i = 2; i < 100; i++)
-        {
-            var cpf = "000000000" + i.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
-            if (!await _context.Users.IgnoreQueryFilters().AnyAsync(u => u.Cpf == cpf, cancellationToken))
-                return cpf;
-        }
-        throw new InvalidOperationException("Seed: não há CPF técnico livre para o administrador.");
     }
 
     private async Task<IReadOnlyList<Permission>> EnsurePermissionsAsync(CancellationToken cancellationToken)
@@ -396,68 +328,5 @@ public sealed class DatabaseSeeder
 
         if (created > 0)
             _logger.LogInformation("Seed: {Count} gerências criadas.", created);
-    }
-
-    private async Task EnsureAdminUserAsync(Role adminRole, CancellationToken cancellationToken)
-    {
-        var email = _configuration["Seed:AdminEmail"]?.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(email))
-        {
-            _logger.LogWarning("Seed: 'Seed:AdminEmail' não configurado. O usuário administrador NÃO foi criado.");
-            return;
-        }
-
-        var exists = await _context.Users
-            .IgnoreQueryFilters()
-            .AnyAsync(u => u.Email == email, cancellationToken);
-
-        if (exists)
-            return;
-
-        // O admin do seed usa um CPF fixo (índice único). Se ele já foi criado com outro e-mail
-        // (Seed:AdminEmail mudou), não tenta criar um segundo: o startup quebraria com violação de índice.
-        var existingSeedAdminEmail = await _context.Users
-            .IgnoreQueryFilters()
-            .Where(u => u.Cpf == AdminCpf)
-            .Select(u => u.Email)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (existingSeedAdminEmail is not null)
-        {
-            _logger.LogWarning(
-                "Seed: o administrador inicial já existe com o e-mail {ExistingEmail}; {Email} (Seed:AdminEmail) NÃO foi criado.",
-                existingSeedAdminEmail, email);
-            return;
-        }
-
-        var password = _configuration["Seed:AdminPassword"];
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            _logger.LogWarning(
-                "Seed: 'Seed:AdminPassword' não configurada. O usuário administrador {Email} NÃO foi criado. " +
-                "Configure-a via user-secrets ou variável de ambiente Seed__AdminPassword e reinicie a aplicação.",
-                email);
-            return;
-        }
-
-        var passwordHash = _passwordHasher.HashPassword(password);
-
-        var admin = new User
-        {
-            FullName = AdminFullName,
-            Email = email,
-            Cpf = AdminCpf,
-            PasswordHash = passwordHash,
-            Status = UserStatus.PendingFirstAccess,
-            MustChangePassword = true,
-            FailedLoginAttempts = 0
-        };
-
-        admin.UserRoles.Add(new UserRole { UserId = admin.Id, RoleId = adminRole.Id, CompanyId = DefaultCompanyId });
-        admin.CreatedInCompanyId = DefaultCompanyId;
-        admin.PasswordHistories.Add(new PasswordHistory { UserId = admin.Id, PasswordHash = passwordHash });
-
-        await _context.Users.AddAsync(admin, cancellationToken);
-        _logger.LogInformation("Seed: usuário administrador {Email} criado (troca de senha obrigatória).", email);
     }
 }

@@ -51,4 +51,33 @@ public class AuditLogsController : BaseController
     [Permission(PermissionCodes.Audit.View)]
     public async Task<ActionResult<Result<IReadOnlyList<AuditUserOptionDto>>>> SearchUsers([FromQuery] string? search, CancellationToken cancellationToken = default) =>
         OkResult(await _queryService.SearchUsersAsync(search, cancellationToken));
+
+    /// <summary>
+    /// Auditoria de ACESSO (Administrador): contas, perfis, gerências de usuários, gerências, motivos e eventos de
+    /// segurança. Sem dados de funcionário nem de medida (nem busca por medida ou matrícula).
+    /// </summary>
+    [HttpGet("access")]
+    [CompanyRoute(CompanyRouteKind.Read)]
+    [Permission(PermissionCodes.Audit.ViewAccess)]
+    [ProducesResponseType(typeof(Result<PagedResult<AuditLogDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<Result<PagedResult<AuditLogDto>>>> SearchAccess(
+        [FromQuery] string? entityName,
+        [FromQuery] string? entityId,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? action,
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] DateTimeOffset? to,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default) =>
+        OkResult(await _queryService.SearchAccessAsync(
+            new AuditLogFilter(entityName, entityId, userId, action, from, to, pageNumber, pageSize), cancellationToken));
+
+    /// <summary>Seletor "Usuário" da auditoria de acesso (até 20). Exige Audit.ViewAccess.</summary>
+    [HttpGet("access/users")]
+    [CompanyRoute(CompanyRouteKind.Read)]
+    [Permission(PermissionCodes.Audit.ViewAccess)]
+    public async Task<ActionResult<Result<IReadOnlyList<AuditUserOptionDto>>>> SearchAccessUsers([FromQuery] string? search, CancellationToken cancellationToken = default) =>
+        OkResult(await _queryService.SearchAccessUsersAsync(search, cancellationToken));
 }

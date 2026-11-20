@@ -42,7 +42,6 @@ public class UsersEndpointsTests : IntegrationTestBase
             FullName: "Novo Usuario Teste",
             Email: $"novo.usuario.{Guid.NewGuid():N}@sigh.com",
             Cpf: "99988877766",
-            InitialPassword: "User@123456",
             RoleIds: new List<Guid>()
         );
 
