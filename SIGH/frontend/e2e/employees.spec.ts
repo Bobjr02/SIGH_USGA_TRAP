@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { ADMIN_EMAIL, adminPassword, apiToken, authed, createUserApi, isoDay, loginUi, logoutUi } from './support/helpers';
+import { apiToken, authed, createReader, createUserApi, isoDay, loginUi, logoutUi } from './support/helpers';
 import { sapFile, syntheticCpf, type SapRow } from './support/xlsx';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -107,6 +107,14 @@ test('SAP import (initial + update), employee with decision support, and a JPG p
   expect(second.toTerminate.map((c: { employeeNumber: string }) => c.employeeNumber)).toEqual(['60090003']);
   await expect(page.getByRole('table', { name: 'Histórico de importações' }).getByText('funcionarios_atualizacao.xlsx')).toBeVisible();
 
+  // O Administrador importa, mas não consulta funcionários: a lista e o detalhe são de quem tem o perfil de dados
+  // (aqui, um Jurídico criado pelo admin).
+  await page.goto('/employees');
+  await expect(page.getByRole('heading', { name: /403/ })).toBeVisible();
+  const reader = await createReader(request, await apiToken(request), 'funcionarios', syntheticCpf('401000007'));
+  await logoutUi(page);
+  await loginUi(page, reader.email, reader.password);
+
   // Eva: zero à esquerda do CPF preservado; lista mostra CPF mascarado.
   await page.goto('/employees');
   // Nome exato: a busca global do topo (PR #10), "Buscar funcionário por nome ou matrícula", também casaria.
@@ -122,8 +130,7 @@ test('SAP import (initial + update), employee with decision support, and a JPG p
   expect(cpfs.eva.startsWith('0')).toBeTruthy();
 
   // 3. Funcionário com uma medida real → quadro de apoio à decisão.
-  const token = await apiToken(request, ADMIN_EMAIL, adminPassword());
-  const list = await (await request.get('/api/v1/employees?searchTerm=60090001', { headers: authed(token) })).json();
+  const list = await (await request.get('/api/v1/employees?searchTerm=60090001', { headers: authed(reader.token) })).json();
   const ana = list.data.items[0];
   const { recordId, registrar } = await arrangeSuspension(request, ana.id);
 

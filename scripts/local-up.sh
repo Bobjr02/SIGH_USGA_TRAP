@@ -26,7 +26,6 @@ if [ ! -f "$ENV_FILE" ]; then
 SIGH_SA_PASSWORD=$(random_secret 24)
 SIGH_JWT_SECRET=$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom | head -c 64)
 SIGH_ADMIN_EMAIL=admin@demo.local
-SIGH_ADMIN_PASSWORD=$(random_secret 16)
 SIGH_DEMO_PASSWORD=$(random_secret 12)
 SIGH_WEB_PORT=8080
 SIGH_MAILPIT_PORT=8025
@@ -74,8 +73,9 @@ cat <<INFO
 ============================================================
  Abra:            http://localhost:${web_port}
  Administrador:   $(value SIGH_ADMIN_EMAIL)
- Senha do admin:  $(value SIGH_ADMIN_PASSWORD)
-                  (no primeiro acesso o sistema pede para trocar a senha)
+                  ninguém conhece a senha dele: no primeiro uso, abra o e-mail
+                  "Acesso de administrador no SIGH" no Mailpit (http://localhost:${mail_port})
+                  e defina a senha pelo link (vale 48 h, uma única vez)
 
  Usuários de demonstração (todos com a senha: $(value SIGH_DEMO_PASSWORD))
    USGA

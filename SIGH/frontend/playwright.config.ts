@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test';
-import { baseConnectionString, userSecret, withDatabase } from './e2e/support/e2eDatabase';
+import { baseConnectionString, withDatabase } from './e2e/support/e2eDatabase';
 
 // E2E (veja e2e/README.md). Dois alvos:
 //   - padrão ("dev"): a API sobe com "dotnet run" e o front com o Vite, contra o SQL Server do docker-compose.yml;
@@ -15,11 +15,9 @@ if (!process.env.E2E_DB_NAME) {
   const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
   process.env.E2E_DB_NAME = `SIGH_E2E_${stamp}`;
 }
-process.env.E2E_ADMIN_PASSWORD ??= userSecret('Seed:AdminPassword');
 process.env.E2E_NEW_PASSWORD ??= `E2e#${randomBytes(6).toString('hex')}Aa1`;
-// Primeiro administrador da Trapiche (multi-company.spec). Na stack vem do scripts/e2e-stack.sh; no dev, gerado aqui.
+// Primeiro administrador da Trapiche (multi-company.spec), sem senha: define a dele pelo link do e-mail.
 process.env.E2E_TRAP_ADMIN_EMAIL ??= 'admin.trap@e2e.local';
-process.env.E2E_TRAP_ADMIN_PASSWORD ??= `Trap#${randomBytes(6).toString('hex')}Aa1`;
 
 const apiConnectionString = STACK ? '' : withDatabase(baseConnectionString(), process.env.E2E_DB_NAME);
 
@@ -38,8 +36,10 @@ const devServers: PlaywrightTestConfig['webServer'] = [
       RateLimits__Login__PermitLimit: '100',
       // Perda de acesso: o cache do SecurityStamp (máx. 30 s) fica em 2 s para o e2e não esperar 30 s.
       Auth__SecurityStampCacheSeconds: '2',
-      Seed__Companies__TRAP__AdminEmail: process.env.E2E_TRAP_ADMIN_EMAIL,
-      Seed__Companies__TRAP__AdminPassword: process.env.E2E_TRAP_ADMIN_PASSWORD,
+      // Toda conta criada pelos specs define a senha pelo link do e-mail (reset-password).
+      RateLimits__ResetPassword__PermitLimit: '200',
+      Seed__CompanyAdmins__0__CompanyCode: 'TRAP',
+      Seed__CompanyAdmins__0__Email: process.env.E2E_TRAP_ADMIN_EMAIL!,
     },
     stdout: 'ignore',
     stderr: 'pipe',

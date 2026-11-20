@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { apiToken, authed, createUserApi, exeBytes, isoDay, loginUi, pdfBytes } from './support/helpers';
+import { apiToken, authed, createReader, createUserApi, exeBytes, isoDay, loginUi, pdfBytes } from './support/helpers';
 import { syntheticCpf } from './support/xlsx';
 import { fileURLToPath } from 'node:url';
 
@@ -16,8 +16,11 @@ test('attach a real PDF to a measure, reject a renamed .exe, download with match
   const stamp = Date.now();
   const registrar = await createUserApi(request, admin, { fullName: 'Auxiliar Evidências', email: `aux.ev.${stamp}@sigh.local`, cpf: syntheticCpf('402000001'), roles: ['HrRegistrar'] });
 
+  // Jurídico (trilha completa de auditoria e consulta de funcionários; o Administrador só tem a auditoria de acesso).
+  const reader = await createReader(request, admin, 'anexos', syntheticCpf('402000002'));
+
   // Medida para o Bruno (60090002, importado pelo spec de funcionários).
-  const bruno = (await (await request.get('/api/v1/employees?searchTerm=60090002', { headers: authed(admin) })).json()).data.items[0];
+  const bruno = (await (await request.get('/api/v1/employees?searchTerm=60090002', { headers: authed(reader.token) })).json()).data.items[0];
   const infraction = await request.post('/api/v1/infraction-types', {
     headers: authed(admin),
     data: { code: `EV${stamp % 100000}`, name: 'Uso indevido de EPI (E2E)', defaultSeverity: 2 },
@@ -67,9 +70,13 @@ test('attach a real PDF to a measure, reject a renamed .exe, download with match
   const viaApi = await request.get(`/api/v1/disciplinary-cases/${recordId}/evidences/${evidenceId}/file`, { headers: authed(registrar.token) });
   expect(viaApi.headers()['x-content-sha256']).toBe(expectedHash);
 
-  // Auditoria (admin tem Audit.View): registro da medida, arquivo anexado e download.
+  // O Administrador não vê a auditoria de medidas (nem o anexo).
+  expect((await request.get(`/api/v1/audit-logs?entityId=${evidenceId}`, { headers: authed(admin) })).status()).toBe(403);
+  expect((await request.get(`/api/v1/disciplinary-cases/${recordId}/evidences/${evidenceId}/file`, { headers: authed(admin) })).status()).toBe(403);
+
+  // Auditoria (o Jurídico tem Audit.View): registro da medida, arquivo anexado e download.
   const audit = async (query: string) =>
-    (await (await request.get(`/api/v1/audit-logs?${query}`, { headers: authed(admin) })).json()).data.items as Array<Record<string, string>>;
+    (await (await request.get(`/api/v1/audit-logs?${query}`, { headers: authed(reader.token) })).json()).data.items as Array<Record<string, string>>;
   const caseLogs = await audit(`entityName=DisciplinaryCase&entityId=${recordId}`);
   const evidenceLogs = await audit(`entityId=${evidenceId}`);
 

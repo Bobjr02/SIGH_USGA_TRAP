@@ -46,7 +46,6 @@ if (-not (Test-Path $envFile)) {
     "SIGH_SA_PASSWORD=$(New-Secret 24)",
     "SIGH_JWT_SECRET=$(New-RandomText 64 '0123456789abcdef')",
     'SIGH_ADMIN_EMAIL=admin@demo.local',
-    "SIGH_ADMIN_PASSWORD=$(New-Secret 16)",
     "SIGH_DEMO_PASSWORD=$(New-Secret 12)",
     'SIGH_WEB_PORT=8080',
     'SIGH_MAILPIT_PORT=8025'
@@ -113,8 +112,9 @@ Write-Host " SIGH no ar em ${elapsed}s  -  AMBIENTE DE DEMONSTRACAO (dados ficti
 Write-Host '============================================================'
 Write-Host " Abra:            http://localhost:$webPort"
 Write-Host " Administrador:   $(Get-Setting 'SIGH_ADMIN_EMAIL' 'admin@demo.local')"
-Write-Host " Senha do admin:  $(Get-Setting 'SIGH_ADMIN_PASSWORD' '')"
-Write-Host '                  (no primeiro acesso o sistema pede para trocar a senha)'
+Write-Host '                  ninguem conhece a senha dele: no primeiro uso, abra o e-mail'
+Write-Host "                  'Acesso de administrador no SIGH' no Mailpit (http://localhost:$mailPort)"
+Write-Host '                  e defina a senha pelo link (vale 48 h, uma unica vez)'
 Write-Host ''
 Write-Host " Usuarios de demonstracao (todos com a senha: $demoPassword)"
 Write-Host '   USGA'

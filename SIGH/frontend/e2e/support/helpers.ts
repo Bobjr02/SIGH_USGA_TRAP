@@ -1,7 +1,10 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
 export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.com.br';
-/** Senha do admin depois da troca obrigatória (auth-flow.spec). */
+/**
+ * Senha que o admin semeado define pelo link do e-mail (auth-flow.spec). Ninguém conhece a senha antes: o seed cria a
+ * conta sem senha utilizável e manda o link de definição.
+ */
 export const adminPassword = () => {
   const value = process.env.E2E_NEW_PASSWORD;
   if (!value) throw new Error('E2E_NEW_PASSWORD não definida.');
@@ -84,29 +87,53 @@ export const unitIds = async (request: APIRequestContext, adminToken: string, co
   return codes.map((c) => units.find((u) => u.code === c)!.id);
 };
 
+/** Assunto do e-mail de conta criada (link de definição de senha, 48 h). */
+export const ACCOUNT_CREATED_SUBJECT = 'Sua conta no SIGH foi criada';
+/** Assunto do e-mail do primeiro administrador da empresa e da recuperação pelo TI. */
+export const ADMIN_ACCESS_SUBJECT = 'Acesso de administrador no SIGH';
+
+/** Link de definição/redefinição de senha do texto do e-mail. */
+export const setupLinkFrom = (text: string) => {
+  const link = /(https?:\/\/\S+\/reset-password\?token=[^\s"<]+)/.exec(text)?.[1];
+  expect(link, text).toBeTruthy();
+  return link!;
+};
+
+/** A própria pessoa define a senha pelo link do e-mail (POST /auth/reset-password com o token do link). */
+export const definePasswordFromEmail = async (request: APIRequestContext, email: string, subject: string, password: string) => {
+  const mail = await waitForEmail(request, email, subject);
+  const token = decodeURIComponent(new URL(setupLinkFrom(mail.text)).searchParams.get('token')!);
+  const reset = await request.post('/api/v1/auth/reset-password', { data: { token, newPassword: password } });
+  expect(reset.ok(), await reset.text()).toBeTruthy();
+};
+
 /**
- * Cria um usuário pela API do admin (perfis e gerências reais) e já faz a troca obrigatória de senha,
- * devolvendo a senha final e um access token.
+ * Cria um usuário pela API do admin (perfis e gerências reais; sem senha: o administrador nunca a conhece) e faz o
+ * que a pessoa faria: define a senha pelo link do e-mail. Devolve a senha e um access token.
  */
 export const createUserApi = async (
   request: APIRequestContext,
   adminToken: string,
   { fullName, email, cpf, roles, units = [] }: { fullName: string; email: string; cpf: string; roles: string[]; units?: string[] },
 ): Promise<E2EUser> => {
-  const initialPassword = `Ini#${Date.now()}Aa`;
   const created = await request.post('/api/v1/users', {
     headers: authed(adminToken),
-    data: { fullName, email, cpf, initialPassword, roleIds: await roleIds(request, adminToken, roles), managementUnitIds: await unitIds(request, adminToken, units) },
+    data: { fullName, email, cpf, roleIds: await roleIds(request, adminToken, roles), managementUnitIds: await unitIds(request, adminToken, units) },
   });
   expect(created.status(), await created.text()).toBe(201);
   const id = (await created.json()).data.id as string;
 
-  const first = await apiToken(request, email, initialPassword);
-  const password = `${initialPassword}9z`;
-  const changed = await request.post('/api/v1/auth/change-password', { headers: authed(first), data: { currentPassword: initialPassword, newPassword: password } });
-  expect(changed.ok(), await changed.text()).toBeTruthy();
-  return { email, password, token: (await changed.json()).data.accessToken as string, id };
+  const password = `Def#${Date.now()}Aa9z`;
+  await definePasswordFromEmail(request, email, ACCOUNT_CREATED_SUBJECT, password);
+  return { email, password, token: await apiToken(request, email, password), id };
 };
+
+/**
+ * Jurídico da USGA criado pelo admin: consulta funcionários, medidas e a trilha completa de auditoria, que o
+ * Administrador não vê mais (ele só gerencia acessos).
+ */
+export const createReader = (request: APIRequestContext, adminToken: string, tag: string, cpf: string) =>
+  createUserApi(request, adminToken, { fullName: `JURIDICO ${tag.toUpperCase()} E2E`, email: `juridico.${tag}.${Date.now()}@sigh.local`, cpf, roles: ['Legal'] });
 
 /** Data local "yyyy-MM-dd", com deslocamento em dias. */
 export const isoDay = (offsetDays = 0) => {

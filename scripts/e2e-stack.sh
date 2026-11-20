@@ -6,7 +6,7 @@
 #   scripts/e2e-stack.sh --demo                # telas com dados de demonstração (SIGH/frontend/e2e-demo:
 #                                              # nenhum termo em inglês, acessibilidade; capturas com SIGH_SCREENSHOTS=1)
 #
-# - Segredos aleatórios gerados AQUI, só em variáveis de ambiente (nenhum arquivo; o .env.local não é lido nem tocado).
+# - Segredos aleatórios gerados AQUI (nenhuma senha de administrador: ela é definida pelo link do e-mail), só em variáveis de ambiente (nenhum arquivo; o .env.local não é lido nem tocado).
 # - Projeto compose próprio (sigh-e2e), imagens sigh-api:e2e / sigh-web:e2e e portas 18080/18025:
 #   convive com a stack de demonstração (sigh-local) e não mexe nos volumes dela.
 # - No final, passando ou falhando: remove os containers, a rede e as imagens que criou
@@ -34,10 +34,9 @@ export SIGH_SA_PASSWORD="$(random_secret 24)"
 export SIGH_JWT_SECRET="$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom 2>/dev/null | head -c 64 || true)"
 # Com --demo, o e-mail padrão do seed (o mesmo das capturas em SIGH/docs/telas).
 if [ "${#PW_CONFIG[@]}" -gt 0 ]; then export SIGH_ADMIN_EMAIL="admin@sigh.com.br"; else export SIGH_ADMIN_EMAIL="admin@e2e.local"; fi
-export SIGH_ADMIN_PASSWORD="$(random_secret 16)"
-# Primeiro administrador da Trapiche (Seed:Companies:TRAP), usado pelo multi-company.spec (fora do --demo).
+# Primeiro administrador da Trapiche (Seed:CompanyAdmins), usado pelo multi-company.spec (fora do --demo).
+# Nenhum administrador tem senha: os specs a definem pelo link do e-mail (Mailpit).
 if [ "${#PW_CONFIG[@]}" -eq 0 ]; then export SIGH_TRAP_ADMIN_EMAIL="admin.trap@e2e.local"; else export SIGH_TRAP_ADMIN_EMAIL=""; fi
-export SIGH_TRAP_ADMIN_PASSWORD="$(random_secret 16)"
 export SIGH_DEMO_PASSWORD="$(random_secret 12)"   # exigida pelo compose.app.yml; usada só com --demo
 export SIGH_WEB_PORT="${SIGH_E2E_WEB_PORT:-18080}"
 export SIGH_MAILPIT_PORT="${SIGH_E2E_MAILPIT_PORT:-18025}"
@@ -98,9 +97,7 @@ E2E_TARGET=stack \
 E2E_BASE_URL="http://localhost:$SIGH_WEB_PORT" \
 E2E_MAILPIT_URL="http://localhost:$SIGH_MAILPIT_PORT" \
 E2E_ADMIN_EMAIL="$SIGH_ADMIN_EMAIL" \
-E2E_ADMIN_PASSWORD="$SIGH_ADMIN_PASSWORD" \
 E2E_TRAP_ADMIN_EMAIL="$SIGH_TRAP_ADMIN_EMAIL" \
-E2E_TRAP_ADMIN_PASSWORD="$SIGH_TRAP_ADMIN_PASSWORD" \
 E2E_DB_NAME="$SIGH_E2E_DB_NAME" \
 E2E_SQL_CONTAINER="$SQL_CONTAINER" \
 E2E_API_CONTAINER="$API_CONTAINER" \

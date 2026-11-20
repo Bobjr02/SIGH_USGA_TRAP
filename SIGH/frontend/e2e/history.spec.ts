@@ -52,8 +52,15 @@ test('import employees and history, decision support of 50090007 with history, t
   await expect(page.getByText(/Histórico importado: 14 registro\(s\) novo\(s\)/)).toBeVisible();
   await expect(page.getByTestId('history-batch').first()).toContainText('Aplicado');
 
+  // O auxiliar e o encarregado da etapa 4; o auxiliar (RH – Registro) consulta o funcionário: o Administrador importa,
+  // mas não vê funcionários.
+  const registrar = await createUserApi(request, admin, { fullName: 'Auxiliar Histórico E2E', email: `aux.hist.${stamp}@sigh.local`, cpf: syntheticCpf('404000001'), roles: ['HrRegistrar'] });
+  const approver = await createUserApi(request, admin, { fullName: 'Encarregado Histórico E2E', email: `enc.hist.${stamp}@sigh.local`, cpf: syntheticCpf('404000002'), roles: ['HrApprover'] });
+  await logoutUi(page);
+  await loginUi(page, registrar.email, registrar.password);
+
   // 3. Apoio à decisão da 50090007: 1 advertência, 2 suspensões, 4 dias, tudo histórico.
-  const employees = await (await request.get('/api/v1/employees?searchTerm=50090007', { headers: authed(admin) })).json();
+  const employees = await (await request.get('/api/v1/employees?searchTerm=50090007', { headers: authed(registrar.token) })).json();
   const employee = employees.data.items[0];
   await page.goto(`/employees/${employee.id}`);
   await page.getByRole('tab', { name: 'Apoio à decisão' }).click();
@@ -69,11 +76,6 @@ test('import employees and history, decision support of 50090007 with history, t
   ).toBeVisible();
 
   // 4. Nova medida para ela no fluxo do sprint 6: o auxiliar registra, o encarregado aprova.
-  const registrar = await createUserApi(request, admin, { fullName: 'Auxiliar Histórico E2E', email: `aux.hist.${stamp}@sigh.local`, cpf: syntheticCpf('404000001'), roles: ['HrRegistrar'] });
-  const approver = await createUserApi(request, admin, { fullName: 'Encarregado Histórico E2E', email: `enc.hist.${stamp}@sigh.local`, cpf: syntheticCpf('404000002'), roles: ['HrApprover'] });
-
-  await logoutUi(page);
-  await loginUi(page, registrar.email, registrar.password);
   await page.goto('/medidas/registrar');
   // O campo do formulário, não a busca global do topo (PR #10).
   const form = page.getByRole('form', { name: 'Registrar medida' });
@@ -95,8 +97,6 @@ test('import employees and history, decision support of 50090007 with history, t
   expect(approved.ok(), await approved.text()).toBeTruthy();
 
   // 5. O quadro passa a mostrar histórico + SIGH.
-  await logoutUi(page);
-  await loginUi(page);
   await page.goto(`/employees/${employee.id}`);
   await page.getByRole('tab', { name: 'Apoio à decisão' }).click();
   const after = page.getByRole('region', { name: 'Apoio à decisão' }).getByRole('list', { name: 'Medidas por origem' });

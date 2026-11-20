@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
-import { apiToken, authed, createUserApi, isoDay, loginUi } from './support/helpers';
+import { ADMIN_ACCESS_SUBJECT, apiToken, authed, createUserApi, definePasswordFromEmail, isoDay, loginUi } from './support/helpers';
 import { sapFile, syntheticCpf } from './support/xlsx';
 
 // Multiempresa (USGA × Trapiche), de ponta a ponta:
@@ -9,16 +9,12 @@ import { sapFile, syntheticCpf } from './support/xlsx';
 // - o encarregado.trap aprova;
 // - o admin.trap vincula o jurídico (conta da USGA) à Trapiche sem criar outra conta;
 // - o jurídico vê as duas empresas em "Todas" e não consegue escrever nesse modo;
-// - o admin.trap não vê usuários nem dados da USGA.
-// O primeiro administrador da Trapiche vem do seed (Seed:Companies:TRAP:AdminEmail/AdminPassword, veja compose.e2e.yml).
+// - o admin.trap não vê usuários da USGA nem dados de funcionários (de empresa nenhuma).
+// O primeiro administrador da Trapiche vem do seed (Seed:CompanyAdmins, veja scripts/e2e-stack.sh): sem senha, com o
+// link de definição por e-mail.
 // Funcionários FICTÍCIOS gerados aqui (chaves TRAP131/TRAP132, nomes terminando em TESTE).
 
 const TRAP_ADMIN_EMAIL = process.env.E2E_TRAP_ADMIN_EMAIL ?? 'admin.trap@e2e.local';
-const trapAdminSeedPassword = () => {
-  const value = process.env.E2E_TRAP_ADMIN_PASSWORD;
-  if (!value) throw new Error('E2E_TRAP_ADMIN_PASSWORD não definida.');
-  return value;
-};
 
 const stamp = Date.now();
 const TRAP_EMPLOYEE = '71090001';
@@ -30,19 +26,12 @@ const choose = async (page: Page, label: string | RegExp, option: string | RegEx
   await page.getByRole('option', { name: option }).click();
 };
 
-/** Primeiro acesso do administrador semeado da Trapiche (troca obrigatória de senha), uma vez por banco. */
+/** Primeiro acesso do administrador semeado da Trapiche: define a senha pelo link do e-mail, uma vez por banco. */
+const TRAP_ADMIN_PASSWORD = `Trap#${process.env.E2E_DB_NAME ?? 'e2e'}Aa1`;
 const trapAdminSession = async (request: APIRequestContext) => {
-  const finalPassword = `${trapAdminSeedPassword()}9z`;
-  const login = await request.post('/api/v1/auth/login', { data: { email: TRAP_ADMIN_EMAIL, password: finalPassword } });
-  if (login.ok()) return { token: (await login.json()).data.accessToken as string, password: finalPassword };
-
-  const first = await apiToken(request, TRAP_ADMIN_EMAIL, trapAdminSeedPassword());
-  const changed = await request.post('/api/v1/auth/change-password', {
-    headers: authed(first),
-    data: { currentPassword: trapAdminSeedPassword(), newPassword: finalPassword },
-  });
-  expect(changed.ok(), await changed.text()).toBeTruthy();
-  return { token: (await changed.json()).data.accessToken as string, password: finalPassword };
+  const login = await request.post('/api/v1/auth/login', { data: { email: TRAP_ADMIN_EMAIL, password: TRAP_ADMIN_PASSWORD } });
+  if (!login.ok()) await definePasswordFromEmail(request, TRAP_ADMIN_EMAIL, `${ADMIN_ACCESS_SUBJECT} - Trapiche`, TRAP_ADMIN_PASSWORD);
+  return { token: await apiToken(request, TRAP_ADMIN_EMAIL, TRAP_ADMIN_PASSWORD), password: TRAP_ADMIN_PASSWORD };
 };
 
 const importEmployees = async (request: APIRequestContext, token: string, file: Buffer) => {
@@ -140,20 +129,21 @@ test('multiempresa: Trapiche isolada da USGA, aprovação por empresa, jurídico
   const usersAfter = (await (await request.get('/api/v1/users?pageSize=1', { headers: authed(usgaAdmin) })).json()).data.totalCount as number;
   expect(usersAfter, 'nenhuma conta nova foi criada').toBe(usersBefore);
 
-  // 5. O admin da Trapiche não vê usuários nem dados da USGA.
+  // 5. O admin da Trapiche não vê usuários da USGA e não consulta funcionários (só gerencia acessos); o auxiliar da
+  // Trapiche vê só os funcionários dela.
   await admin.goto('/admin/usuarios');
   await expect(admin.getByText(encarregadoUsga.email)).toHaveCount(0);
   await expect(admin.getByText(encarregadoTrap.email)).toBeVisible();
-  const trapEmployees = await (await request.get('/api/v1/employees?pageSize=100', { headers: authed(trapAdmin.token) })).json();
+  expect((await request.get('/api/v1/employees?pageSize=100', { headers: authed(trapAdmin.token) })).status()).toBe(403);
+  const trapEmployees = await (await request.get('/api/v1/employees?pageSize=100', { headers: authed(auxiliarTrap.token) })).json();
   expect((trapEmployees.data.items as Array<{ managementUnitCode: string }>).every((e) => e.managementUnitCode.startsWith('TRAP'))).toBeTruthy();
-  expect((await request.get('/api/v1/employees?searchTerm=60090004', { headers: authed(trapAdmin.token) })).ok()).toBeTruthy();
-  expect((await (await request.get('/api/v1/employees?searchTerm=60090004', { headers: authed(trapAdmin.token) })).json()).data.items).toHaveLength(0);
+  expect((await (await request.get('/api/v1/employees?searchTerm=60090004', { headers: authed(auxiliarTrap.token) })).json()).data.items).toHaveLength(0);
 
   // 6. O jurídico vê as duas empresas em "Todas" e não consegue escrever nesse modo.
   const usgaRegistrar = await createUserApi(request, usgaAdmin, { fullName: 'AUXILIAR USGA TESTE', email: `auxiliar.usga.${stamp}@sigh.local`, cpf: syntheticCpf('711000005'), roles: ['HrRegistrar'] });
   // Um funcionário da USGA que não é o do records.spec (60090004), para não interferir na fila dele.
   const usgaEmployees: Array<{ id: string; employeeNumber: string; status: number | string }> =
-    (await (await request.get('/api/v1/employees?pageSize=100', { headers: authed(usgaAdmin) })).json()).data.items;
+    (await (await request.get('/api/v1/employees?pageSize=100', { headers: authed(usgaRegistrar.token) })).json()).data.items;
   const davi = usgaEmployees.find((e) => e.employeeNumber !== '60090004' && (e.status === 2 || e.status === 'Active'))!;
   expect(davi, 'um funcionário ativo da USGA').toBeTruthy();
   const usgaInfraction = await request.post('/api/v1/infraction-types', { headers: authed(usgaAdmin), data: { code: `USG${stamp % 100000}`, name: 'Atraso na USGA (E2E)', defaultSeverity: 2 } });

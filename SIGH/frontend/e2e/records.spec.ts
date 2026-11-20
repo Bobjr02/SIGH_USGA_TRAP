@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
-import { apiToken, authed, createUserApi, isoDay, loginUi, waitForEmail } from './support/helpers';
+import { apiToken, authed, createReader, createUserApi, isoDay, loginUi, waitForEmail } from './support/helpers';
 import { syntheticCpf } from './support/xlsx';
 
 // Fluxo completo do RH (Parte E): perfis, registro → rejeição → correção → aprovação, escopo por
@@ -52,7 +52,9 @@ const choose = async (page: Page, label: string | RegExp, option: string | RegEx
 test('records: register, reject, correct, approve, manager scope, admin cannot approve, segregation and immediate loss of access', async ({ browser, request }) => {
   test.setTimeout(300_000);
   const adminToken = await apiToken(request);
-  const davi = (await (await request.get('/api/v1/employees?searchTerm=60090004', { headers: authed(adminToken) })).json()).data.items[0];
+  // O Administrador não consulta funcionários: quem procura o Davi é um Jurídico criado por ele.
+  const reader = await createReader(request, adminToken, 'medidas', syntheticCpf('403000006'));
+  const davi = (await (await request.get('/api/v1/employees?searchTerm=60090004', { headers: authed(reader.token) })).json()).data.items[0];
   expect(davi.managementUnitCode).toBe('USGA131');
   const infraction = await request.post('/api/v1/infraction-types', {
     headers: authed(adminToken),
@@ -141,7 +143,7 @@ test('records: register, reject, correct, approve, manager scope, admin cannot a
   await expect(gestor132.getByTestId('record-not-found').getByText('Medida não encontrada.', { exact: true })).toBeVisible();
   expect((await request.get(`/api/v1/disciplinary-records/${recordId}`, { headers: authed(gestor132User.token) })).status()).toBe(404);
 
-  // e. O administrador não vê o botão de aprovar, e a API recusa se ele tentar.
+  // e. O administrador nem consulta medidas (403 na tela e na API), e a API recusa se ele tentar aprovar.
   const pending = await request.post('/api/v1/disciplinary-records', {
     headers: authed((await apiToken(request, people.auxiliar.email, PASSWORD))),
     data: { employeeId: davi.id, infractionTypeId: (await infraction.json()).data.id, measureType: 2, occurrenceDates: [isoDay(-1)], measureDate: isoDay(0), description: 'Advertência verbal por atraso.' },
@@ -149,8 +151,9 @@ test('records: register, reject, correct, approve, manager scope, admin cannot a
   expect(pending.status(), await pending.text()).toBe(201);
   const pendingId = (await pending.json()).data.record.summary.id as string;
   await admin.goto(`/medidas/${pendingId}`);
-  await expect(admin.getByTestId('record-status')).toHaveText('Aguardando aprovação');
+  await expect(admin.getByRole('heading', { name: /403/ })).toBeVisible();
   await expect(admin.getByRole('button', { name: 'Aprovar' })).toHaveCount(0);
+  expect((await request.get(`/api/v1/disciplinary-records/${pendingId}`, { headers: authed(adminToken) })).status()).toBe(403);
   expect((await request.post(`/api/v1/disciplinary-records/${pendingId}/approve`, { headers: authed(adminToken) })).status()).toBe(403);
 
   // f. Um usuário com os dois perfis registra uma medida e não consegue aprová-la.
