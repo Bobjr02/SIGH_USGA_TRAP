@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { syntheticCpf } from '../e2e/support/xlsx';
-import { FORBIDDEN_TERMS, forbiddenIn, login, profile, PROFILES, selectCompany, settle, THEME_LABEL, THEMES } from './support/demo';
+import { ensureRoleChangedEvent, FORBIDDEN_TERMS, forbiddenIn, login, profile, PROFILES, ROLES_CHANGED_LABEL, selectCompany, settle, THEME_LABEL, THEMES } from './support/demo';
 import { otherCompanyPreview } from './support/files';
 import { DETAILS, menuPaths, openDetail, screenText, visibleTextWithTabs } from './support/pages';
 
@@ -43,7 +43,7 @@ for (const theme of THEMES) {
     });
 
     for (const who of PROFILES) {
-      test(`${who.label}: no English on any page`, async ({ page }) => {
+      test(`${who.label}: no English on any page`, async ({ page, playwright, baseURL }) => {
         const found: string[] = [];
         const check = (where: string, text: string) => {
           for (const term of forbiddenIn(text)) found.push(`${where}: "${term}"`);
@@ -54,8 +54,17 @@ for (const theme of THEMES) {
         if (await page.getByTestId('notification-bell-button').count()) paths.push('/notifications');
 
         for (const path of paths) {
+          if (path === '/audit') {
+            // Antes da Auditoria: um evento "perfis ou permissões alterados" (detalhes aninhados), qualquer que
+            // seja a ordem dos testes.
+            const api = await playwright.request.newContext({ baseURL });
+            await ensureRoleChangedEvent(api);
+            await api.dispose();
+          }
           await page.goto(path);
-          check(path, await visibleTextWithTabs(page));
+          const text = await visibleTextWithTabs(page);
+          if (path === '/audit') expect(text, `a Auditoria de ${who.label} mostra o evento de perfil alterado`).toContain(ROLES_CHANGED_LABEL);
+          check(path, text);
         }
         for (const detail of DETAILS.filter((d) => paths.includes(d.path))) {
           if (await openDetail(page, detail)) check(detail.name, await visibleTextWithTabs(page));
@@ -111,7 +120,19 @@ for (const theme of THEMES) {
       await expect(alert.getByRole('button', { name: 'Fechar' })).toBeVisible();
       await expectNoEnglish(page, 'alerta Usuário criado', found);
 
-      // Paginação de uma lista grande (funcionários de demonstração): página seguinte inclusive.
+      // O "Reenviar link de definição de senha" da pessoa recém-criada (que ainda não definiu a senha).
+      await page.getByTestId('resend-setup-link').click();
+      await expect(page.getByText(/Link de definição de senha reenviado/)).toBeVisible();
+      await expectNoEnglish(page, 'alerta Link reenviado', found);
+
+      expect(found, 'termos em inglês').toEqual([]);
+    });
+
+    test('juridico: the paginated employees list has no English', async ({ page }) => {
+      const found: string[] = [];
+      // O Administrador não vê funcionários: a paginação da lista grande é conferida com o Jurídico.
+      // O Jurídico começa na empresa do primeiro perfil (USGA), com os funcionários de demonstração dela.
+      await login(page, profile('juridico'), theme);
       await page.goto('/employees');
       await settle(page);
       await expectNoEnglish(page, 'funcionários, página 1', found);

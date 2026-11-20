@@ -1,4 +1,5 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { syntheticCpf } from '../../e2e/support/xlsx';
 import enumValues from '../../src/i18n/enum-values.json' with { type: 'json' };
 
 export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.com.br';
@@ -44,6 +45,35 @@ export const login = async (page: Page, who: DemoProfile, theme: DemoTheme = 'da
   await page.getByLabel('Senha', { exact: true }).fill(who.password());
   await page.getByRole('button', { name: 'Entrar' }).click();
   await expect(page.getByTestId('current-user-name').or(page.getByTestId('dashboard')).first()).toBeVisible({ timeout: 30_000 });
+};
+
+/** Rótulo do evento "perfis ou permissões alterados" na Auditoria (Security.RolesOrPermissionsChanged). */
+export const ROLES_CHANGED_LABEL = 'Perfis ou permissões alterados';
+
+/**
+ * Garante, na USGA e na Trapiche, um evento "perfis ou permissões alterados" recente: o administrador de cada empresa
+ * cria uma pessoa FICTÍCIA com um perfil (o perfil atribuído gera o evento). Assim a Auditoria sempre mostra os
+ * detalhes desse evento (entidade e ação aninhadas), sem depender da ordem dos testes. Usa um contexto de API
+ * próprio: não mexe na sessão do navegador.
+ */
+export const ensureRoleChangedEvent = async (api: APIRequestContext) => {
+  for (const admin of ['admin.usga', 'admin.trap']) {
+    const login = await api.post('/api/v1/auth/login', { data: { email: `${admin}@demo.local`, password: demoPassword() } });
+    expect(login.ok(), await login.text()).toBeTruthy();
+    const headers = { Authorization: `Bearer ${(await login.json()).data.accessToken as string}` };
+    const roles: Array<{ id: string; name: string }> = (await (await api.get('/api/v1/roles', { headers })).json()).data;
+    const stamp = `${Date.now()}`;
+    const created = await api.post('/api/v1/users', {
+      headers,
+      data: {
+        fullName: 'PERFIL ALTERADO TESTE',
+        email: `perfil.alterado.${admin}.${stamp}@demo.local`,
+        cpf: syntheticCpf(stamp.slice(-9)),
+        roleIds: [roles.find((r) => r.name === 'HrRegistrar')!.id],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+  }
 };
 
 /** Troca a empresa ativa pelo seletor do topo (só aparece para quem tem duas ou mais empresas). */

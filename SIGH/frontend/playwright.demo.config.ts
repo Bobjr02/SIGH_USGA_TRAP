@@ -2,12 +2,12 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test';
-import { baseConnectionString, userSecret, withDatabase } from './e2e/support/e2eDatabase';
+import { baseConnectionString, withDatabase } from './e2e/support/e2eDatabase';
 
 // Telas com os DADOS DE DEMONSTRAÇÃO num banco descartável SIGH_E2E_<timestamp> (como o e2e):
 //   npx playwright test -c playwright.demo.config.ts
 // A API (dotnet run) sobe com Seed:DemoData=true (o mesmo seed da stack local) e o banco é apagado no
-// final. Assim o administrador tem senha conhecida (troca obrigatória feita pelo setup) sem mexer no
+// final. O administrador define a senha pelo link do e-mail (setup.spec, no Mailpit) sem mexer no
 // volume nem no .env.local da stack em contêineres.
 //   - no-english.spec: nenhum termo em inglês na tela, com cada perfil;
 //   - accessibility.spec: axe-core (WCAG 2 AA, contraste) nos dois temas;
@@ -21,7 +21,6 @@ if (!process.env.E2E_DB_NAME) {
   const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
   process.env.E2E_DB_NAME = `SIGH_E2E_${stamp}`;
 }
-process.env.E2E_ADMIN_PASSWORD ??= userSecret('Seed:AdminPassword');
 process.env.E2E_NEW_PASSWORD ??= `Demo#${randomBytes(6).toString('hex')}Aa1`;
 process.env.SIGH_DEMO_PASSWORD ??= `Demo#${randomBytes(6).toString('hex')}Bb2`;
 
@@ -41,6 +40,7 @@ const devServers: PlaywrightTestConfig['webServer'] = [
       Seed__DemoDataPath: path.resolve(HERE, '../docs/referencias'),
       Seed__DefaultCompanyName: 'Usina Serra Grande S.A. (DEMONSTRAÇÃO)',
       RateLimits__Login__PermitLimit: '1000',
+      RateLimits__ResetPassword__PermitLimit: '200',
     },
     stdout: 'ignore',
     stderr: 'pipe',

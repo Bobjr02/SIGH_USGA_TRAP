@@ -19,6 +19,7 @@ const SCREENS: { name: string; who: string; path?: string; detail?: string; prep
   { name: 'registrar medida', who: 'auxiliar', path: '/medidas/registrar' },
   { name: 'aprovações', who: 'encarregado', path: '/medidas/aprovacoes' },
   { name: 'usuários', who: 'admin', path: '/admin/usuarios' },
+  { name: 'auditoria de acesso', who: 'admin', path: '/audit' },
   { name: 'detalhe de usuário', who: 'admin', detail: 'detalhe de usuário' },
   // Telas com o seletor de arquivo (FilePicker): vazio, com arquivo escolhido e com extensão errada.
   { name: 'importar funcionários', who: 'admin', path: '/employees/import' },
