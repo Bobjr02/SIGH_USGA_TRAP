@@ -50,3 +50,6 @@ playwright/.cache/
 
 # Dados locais da API (storage de evidências em dev)
 SIGH/backend/.data/
+
+# Cache incremental do TypeScript (tsc -b / tsc --incremental)
+*.tsbuildinfo
