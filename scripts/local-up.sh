@@ -72,13 +72,9 @@ cat <<INFO
  SIGH no ar em ${elapsed}s  —  AMBIENTE DE DEMONSTRAÇÃO (dados fictícios)
 ============================================================
  Abra:            http://localhost:${web_port}
- Administrador:   $(value SIGH_ADMIN_EMAIL)
-                  ninguém conhece a senha dele: no primeiro uso, abra o e-mail
-                  "Acesso de administrador no SIGH" no Mailpit (http://localhost:${mail_port})
-                  e defina a senha pelo link (vale 48 h, uma única vez)
-
  Usuários de demonstração (todos com a senha: $(value SIGH_DEMO_PASSWORD))
    USGA
+   $(printf '%-30s' "$(value SIGH_ADMIN_EMAIL)") Administrador (o primeiro, do seed)
    auxiliar@demo.local            RH – Registro
    encarregado@demo.local         RH – Aprovador
    gestor.industrial@demo.local   Gestor da USGA131

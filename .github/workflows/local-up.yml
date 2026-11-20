@@ -1,0 +1,55 @@
+name: SIGH Local-up
+
+# O caminho de quem roda a demonstração na própria máquina: scripts/local-up.sh com compose.app.yml e o .env.local
+# gerado pelo próprio script (a MESMA configuração, sem nenhuma sobreposição de e2e). scripts/local-up-check.sh confere
+# que o log da API não tem "Demo: falha", que os dados de demonstração foram criados, que a saída lista o
+# administrador com a senha de demonstração e que o administrador do seed, o admin.usga e o juridico entram.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'SIGH/**'
+      - 'compose.app.yml'
+      - 'scripts/local-*.sh'
+      - '.github/workflows/local-up.yml'
+  # Em TODO PR para a main, sem filtro de caminhos (o check sempre aparece, como os de e2e).
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-up-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-up:
+    name: Local-up (stack de demonstração)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run scripts/local-up.sh and check the demo data
+        run: scripts/local-up-check.sh
+
+      - name: API logs
+        if: always()
+        run: docker compose -p sigh-local -f compose.app.yml --env-file .env.local logs --no-color --timestamps api > local-up-api.log 2>&1 || true
+
+      - name: Upload API logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-up-api-log
+          path: local-up-api.log
+          retention-days: 14
+
+      # Runner descartável: remove containers e volumes desta execução.
+      - name: Tear down
+        if: always()
+        run: docker compose -p sigh-local -f compose.app.yml --env-file .env.local down --volumes --remove-orphans --timeout 5 || true

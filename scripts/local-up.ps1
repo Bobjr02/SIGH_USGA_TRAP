@@ -111,13 +111,9 @@ Write-Host '============================================================'
 Write-Host " SIGH no ar em ${elapsed}s  -  AMBIENTE DE DEMONSTRACAO (dados ficticios)"
 Write-Host '============================================================'
 Write-Host " Abra:            http://localhost:$webPort"
-Write-Host " Administrador:   $(Get-Setting 'SIGH_ADMIN_EMAIL' 'admin@demo.local')"
-Write-Host '                  ninguem conhece a senha dele: no primeiro uso, abra o e-mail'
-Write-Host "                  'Acesso de administrador no SIGH' no Mailpit (http://localhost:$mailPort)"
-Write-Host '                  e defina a senha pelo link (vale 48 h, uma unica vez)'
-Write-Host ''
 Write-Host " Usuarios de demonstracao (todos com a senha: $demoPassword)"
 Write-Host '   USGA'
+Write-Host "   $((Get-Setting 'SIGH_ADMIN_EMAIL' 'admin@demo.local').PadRight(30)) Administrador (o primeiro, do seed)"
 Write-Host '   auxiliar@demo.local            RH - Registro'
 Write-Host '   encarregado@demo.local         RH - Aprovador'
 Write-Host '   gestor.industrial@demo.local   Gestor da USGA131'

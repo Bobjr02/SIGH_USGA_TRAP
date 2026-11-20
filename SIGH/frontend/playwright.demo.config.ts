@@ -7,7 +7,7 @@ import { baseConnectionString, withDatabase } from './e2e/support/e2eDatabase';
 // Telas com os DADOS DE DEMONSTRAÇÃO num banco descartável SIGH_E2E_<timestamp> (como o e2e):
 //   npx playwright test -c playwright.demo.config.ts
 // A API (dotnet run) sobe com Seed:DemoData=true (o mesmo seed da stack local) e o banco é apagado no
-// final. O administrador define a senha pelo link do e-mail (setup.spec, no Mailpit) sem mexer no
+// final. Como no scripts/local-up, o administrador do seed (admin@demo.local) fica com a senha de demonstração, sem mexer no
 // volume nem no .env.local da stack em contêineres.
 //   - no-english.spec: nenhum termo em inglês na tela, com cada perfil;
 //   - accessibility.spec: axe-core (WCAG 2 AA, contraste) nos dois temas;
@@ -21,7 +21,6 @@ if (!process.env.E2E_DB_NAME) {
   const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
   process.env.E2E_DB_NAME = `SIGH_E2E_${stamp}`;
 }
-process.env.E2E_NEW_PASSWORD ??= `Demo#${randomBytes(6).toString('hex')}Aa1`;
 process.env.SIGH_DEMO_PASSWORD ??= `Demo#${randomBytes(6).toString('hex')}Bb2`;
 
 const apiConnectionString = STACK ? '' : withDatabase(baseConnectionString(), process.env.E2E_DB_NAME);
@@ -37,6 +36,10 @@ const devServers: PlaywrightTestConfig['webServer'] = [
       ASPNETCORE_ENVIRONMENT: 'Development',
       Seed__DemoData: 'true',
       Seed__DemoPassword: process.env.SIGH_DEMO_PASSWORD!,
+      // Mesma configuração do compose.app.yml (scripts/local-up).
+      Seed__CompanyAdmins__0__CompanyCode: 'USGA',
+      Seed__CompanyAdmins__0__Email: 'admin@demo.local',
+      Seed__CompanyAdmins__0__Name: 'Administrador do Sistema',
       Seed__DemoDataPath: path.resolve(HERE, '../docs/referencias'),
       Seed__DefaultCompanyName: 'Usina Serra Grande S.A. (DEMONSTRAÇÃO)',
       RateLimits__Login__PermitLimit: '1000',
