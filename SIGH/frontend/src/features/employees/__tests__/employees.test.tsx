@@ -159,8 +159,7 @@ describe('/employees/:id', () => {
     await user.click(screen.getByRole('tab', { name: 'Apoio à decisão' }));
     const box = within(await screen.findByRole('region', { name: 'Apoio à decisão' }));
     expect(box.getByText('Informativo')).toBeInTheDocument();
-    expect(box.getByText('1 verbal(is), 1 escrita(s)')).toBeInTheDocument();
-    expect(box.getByText('3 dia(s) no total')).toBeInTheDocument();
+    expect(box.getAllByTestId('support-stat-hint').map((h) => h.textContent)).toEqual(['1 verbal · 1 escrita', '3 dias no total']);
     expect(box.getByText('05/10/2026')).toBeInTheDocument();
     expect(within(box.getByRole('list', { name: 'Medidas por motivo' })).getByText(/Falta não justificada/)).toBeInTheDocument();
 
@@ -252,7 +251,7 @@ describe('/employees/import', () => {
     await user.click(confirmButton);
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith('batch-1', expect.any(File), true));
-    expect(await screen.findByText(/Importação aplicada: 1 novo\(s\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/Importação aplicada: 1 novo,/)).toBeInTheDocument();
     expect(screen.getByRole('listitem', { name: 'Passo 3: Confirmar importação (concluído)' })).toBeInTheDocument();
   });
 
@@ -282,7 +281,7 @@ describe('/employees/import', () => {
   });
 
   it('shows the server error for a file with a missing column', async () => {
-    vi.spyOn(employeesApi, 'previewImport').mockRejectedValue(new Error('Coluna(s) obrigatória(s) não encontrada(s) no cabeçalho: "Chave Organização".'));
+    vi.spyOn(employeesApi, 'previewImport').mockRejectedValue(new Error('Coluna obrigatória não encontrada no cabeçalho: "Chave Organização".'));
     server.use(refreshSucceeds(), importUser(), batches());
     const user = userEvent.setup();
 

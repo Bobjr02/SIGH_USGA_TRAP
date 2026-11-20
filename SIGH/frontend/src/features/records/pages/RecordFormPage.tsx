@@ -36,6 +36,7 @@ import {
   type RecordInput,
 } from '../api/recordsApi';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { plural } from '../../../utils/plural';
 
 interface FormState {
   employee: EmployeeListItem | null;
@@ -220,7 +221,7 @@ export const RecordFormPage: React.FC = () => {
 
           <Box>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Data(s) da ocorrência
+              {plural(form.occurrenceDates.length, 'Data da ocorrência', 'Datas da ocorrência')}
             </Typography>
             {form.occurrenceDates.map((date, index) => (
               <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1 }}>

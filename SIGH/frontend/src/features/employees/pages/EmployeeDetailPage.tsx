@@ -11,22 +11,49 @@ import { ErrorState } from '../../../components/ui/States';
 import { EmployeeStatusChip } from '../../../components/ui/StatusChip';
 import { label } from '../../../i18n/labels';
 import { formatDate, formatDays, formatNumber } from '../../../utils/formatters';
+import { countOf, plural } from '../../../utils/plural';
 import { recordErrorMessage, recordKeys, recordsApi, type RecordFilters } from '../../records/api/recordsApi';
 import { RecordsTable } from '../../records/components/RecordsTable';
 import { employeeKeys, employeesApi, formatCpf, type DecisionSupport } from '../api/employeesApi';
 
-const Stat: React.FC<{ label: string; value: React.ReactNode; hint?: string }> = ({ label: text, value, hint }) => (
-  <div className="rounded-lg border border-line bg-surface-2 p-3">
-    <p className="text-xs text-muted">{text}</p>
-    <p className="text-xl font-bold text-ink">{value}</p>
-    {hint && <p className="text-xs text-muted">{hint}</p>}
+/**
+ * Cartão do quadro: rótulo curto (no máximo 2 linhas, sem quebrar no meio da palavra), número grande e apoio.
+ * Números em tamanho grande fixo. A data ("shrink") acompanha a largura do cartão, que é um contêiner (@container,
+ * unidade cqi): dd/mm/aaaa nunca é cortada, nem com 3 colunas num painel de 420 px. No apoio, cada "número + palavra"
+ * fica junto (nunca "1" numa linha e "escrita" na outra).
+ */
+const Stat: React.FC<{ label: string; value: React.ReactNode; hint?: React.ReactNode; testId?: string; shrink?: boolean }> = ({
+  label: text,
+  value,
+  hint,
+  testId,
+  shrink,
+}) => (
+  <div className="@container flex flex-col gap-1 rounded-lg border border-line bg-surface-2 p-3" data-testid={testId ?? 'support-stat'}>
+    <p className="text-xs leading-snug text-muted [overflow-wrap:normal] [word-break:normal] hyphens-none" data-testid="support-stat-label">
+      {text}
+    </p>
+    <p
+      className={`whitespace-nowrap font-bold leading-tight tabular-nums text-ink ${shrink ? 'text-[length:min(1.5rem,15cqi)]' : 'text-2xl'}`}
+      data-testid="support-stat-value"
+    >
+      {value}
+    </p>
+    {hint && (
+      <p className="text-xs leading-snug text-muted [overflow-wrap:normal] [word-break:normal] hyphens-none" data-testid="support-stat-hint">
+        {hint}
+      </p>
+    )}
   </div>
 );
 
+/** Mantém "número + palavra" na mesma linha. */
+const Keep: React.FC<{ children: React.ReactNode }> = ({ children }) => <span className="whitespace-nowrap">{children}</span>;
+
 const CountList: React.FC<{ title: string; items: { label: string; count: number }[] }> = ({ title, items }) => (
-  <div>
+  <div className="min-w-0">
     <h3 className="mb-1 text-sm font-semibold text-ink">{title}</h3>
-    <ul aria-label={title} className="list-disc pl-5 text-sm text-ink">
+    <ul aria-label={title} className="list-disc pl-5 text-sm text-ink [overflow-wrap:anywhere]">
       {items.map((t) => (
         <li key={t.label}>
           {t.label}: <strong>{formatNumber(t.count)}</strong>
@@ -36,59 +63,93 @@ const CountList: React.FC<{ title: string; items: { label: string; count: number
   </div>
 );
 
-/** Quadro de apoio à decisão: só informativo, nunca sugere medida. */
+/** Singular dos rótulos de origem que vêm do backend no plural ("1 advertência", "2 advertências"). */
+const ORIGIN_SINGULAR: Record<string, string> = {
+  advertências: 'advertência',
+  suspensões: 'suspensão',
+  'demissões por justa causa': 'demissão por justa causa',
+  outras: 'outra',
+};
+const originLabel = (label: string, total: number) => {
+  const lower = label.toLowerCase();
+  return plural(total, ORIGIN_SINGULAR[lower] ?? lower, lower);
+};
+
+/**
+ * Quadro de apoio à decisão: só informativo, nunca sugere medida. O layout segue a largura do PRÓPRIO painel
+ * (container queries), não a da janela: ele aparece no detalhe do funcionário e, mais estreito, no registro de medida.
+ *   - painel com 420 px ou mais: 3 colunas (2 linhas) e as listas "por tipo" e "por motivo" lado a lado;
+ *   - de 260 a 419 px: 2 colunas;
+ *   - abaixo de 260 px: 1 coluna.
+ */
 export const DecisionSupportPanel: React.FC<{ data: DecisionSupport }> = ({ data }) => (
-  <SectionCard
-    ariaLabel="Apoio à decisão"
-    title={
-      <span className="inline-flex items-center gap-2">
-        <Scale size={18} aria-hidden="true" /> Apoio à decisão
-        <span className="rounded border border-line-strong px-1.5 py-0.5 text-xs font-semibold text-muted">Informativo</span>
-      </span>
-    }
-  >
-    {data.totalMeasures === 0 ? (
-      <p className="text-sm text-muted">Nenhuma medida disciplinar aplicada.</p>
-    ) : (
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <Stat label="Medidas aplicadas" value={formatNumber(data.totalMeasures)} />
-          <Stat label="Advertências" value={formatNumber(data.warnings)} hint={`${data.verbalWarnings} verbal(is), ${data.writtenWarnings} escrita(s)`} />
-          <Stat
-            label="Suspensões"
-            value={formatNumber(data.suspensions)}
-            hint={`${data.suspensionDays} dia(s) no total${
-              data.suspensionsWithoutPeriod
-                ? ` +${data.suspensionsWithoutPeriod} suspensão${data.suspensionsWithoutPeriod > 1 ? 'ões' : ''} sem dias informados`
-                : ''
-            }`}
-          />
-          <Stat label="Última medida" value={formatDate(data.lastMeasureAt)} />
-          <Stat label="Últimos 6 meses" value={formatNumber(data.measuresLast6Months)} />
-          <Stat label="Últimos 12 meses" value={formatNumber(data.measuresLast12Months)} />
-        </div>
-        {(data.historicalMeasures ?? 0) > 0 && data.byOrigin && (
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-ink">Por origem</h3>
-            <ul aria-label="Medidas por origem" className="list-disc pl-5 text-sm text-ink">
-              {data.byOrigin.map((o) => (
-                <li key={o.label} data-testid="origin-breakdown">
-                  <strong>
-                    {o.total} {o.label.toLowerCase()}
-                  </strong>{' '}
-                  — {o.historical} histórica{o.historical === 1 ? '' : 's'}, {o.sigh} no SIGH
-                </li>
-              ))}
-            </ul>
+  <div className="@container/apoio" data-testid="decision-support">
+    <SectionCard
+      ariaLabel="Apoio à decisão"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <Scale size={18} aria-hidden="true" /> Apoio à decisão
+          <span className="rounded border border-line-strong px-1.5 py-0.5 text-xs font-semibold text-muted">Informativo</span>
+        </span>
+      }
+    >
+      {data.totalMeasures === 0 ? (
+        <p className="text-sm text-muted">Nenhuma medida disciplinar aplicada.</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-3 @min-[260px]/apoio:grid-cols-2 @min-[420px]/apoio:grid-cols-3" data-testid="support-stats">
+            <Stat label="Medidas aplicadas" value={formatNumber(data.totalMeasures)} />
+            <Stat
+              label="Advertências"
+              value={formatNumber(data.warnings)}
+              hint={
+                <>
+                  <Keep>{countOf(data.verbalWarnings, 'verbal', 'verbais')}</Keep> · <Keep>{countOf(data.writtenWarnings, 'escrita', 'escritas')}</Keep>
+                </>
+              }
+            />
+            <Stat
+              label="Suspensões"
+              value={formatNumber(data.suspensions)}
+              hint={
+                <>
+                  <Keep>{countOf(data.suspensionDays, 'dia', 'dias')}</Keep> no total
+                  {data.suspensionsWithoutPeriod > 0 && (
+                    <>
+                      <br />
+                      <Keep>+{countOf(data.suspensionsWithoutPeriod, 'suspensão', 'suspensões')}</Keep> sem dias informados
+                    </>
+                  )}
+                </>
+              }
+            />
+            <Stat label="Última medida" value={data.lastMeasureAt ? formatDate(data.lastMeasureAt) : 'Nenhuma'} testId="support-stat-last" shrink />
+            <Stat label="Últimos 6 meses" value={formatNumber(data.measuresLast6Months)} />
+            <Stat label="Últimos 12 meses" value={formatNumber(data.measuresLast12Months)} />
           </div>
-        )}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <CountList title="Medidas por tipo" items={data.byType} />
-          <CountList title="Medidas por motivo" items={data.byInfractionType} />
+          {(data.historicalMeasures ?? 0) > 0 && data.byOrigin && (
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-ink">Por origem</h3>
+              <ul aria-label="Medidas por origem" className="list-disc pl-5 text-sm text-ink">
+                {data.byOrigin.map((o) => (
+                  <li key={o.label} data-testid="origin-breakdown">
+                    <strong>
+                      {formatNumber(o.total)} {originLabel(o.label, o.total)}
+                    </strong>{' '}
+                    — {countOf(o.historical, 'histórica', 'históricas')}, {formatNumber(o.sigh)} no SIGH
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 @min-[420px]/apoio:grid-cols-2">
+            <CountList title="Medidas por tipo" items={data.byType} />
+            <CountList title="Medidas por motivo" items={data.byInfractionType} />
+          </div>
         </div>
-      </div>
-    )}
-  </SectionCard>
+      )}
+    </SectionCard>
+  </div>
 );
 
 const History: React.FC<{ employeeId: string }> = ({ employeeId }) => {
@@ -178,7 +239,7 @@ export const EmployeeDetailPage: React.FC = () => {
         </SectionCard>
         {canSeeSupport && support.data && support.data.totalMeasures > 0 && (
           <p className="text-sm text-muted">
-            {formatNumber(support.data.totalMeasures)} medida(s) no histórico · {formatDays(support.data.suspensionDays)} de suspensão. Veja as abas
+            {countOf(support.data.totalMeasures, 'medida', 'medidas')} no histórico · {formatDays(support.data.suspensionDays)} de suspensão. Veja as abas
             “Histórico disciplinar” e “Apoio à decisão”.
           </p>
         )}

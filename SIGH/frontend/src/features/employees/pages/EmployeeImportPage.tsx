@@ -21,12 +21,13 @@ import {
 } from '@mui/material';
 import { FileSpreadsheet } from 'lucide-react';
 import { employeeKeys, employeesApi, type ImportChange, type ImportIssue, type ImportPreview, type ImportResult } from '../api/employeesApi';
-import { formatDateTime, formatPercent } from '../../../utils/formatters';
+import { formatDateTime, formatNumber, formatPercent } from '../../../utils/formatters';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FilePicker } from '../../../components/ui/FilePicker';
 import { ImportSteps } from '../../../components/ui/ImportSteps';
 import { ImportTargetCompany, OtherCompanyFileAlert, useImportCompany } from '../../../components/ui/ImportCompany';
 import { formatBytes } from '../../disciplinary/evidence/evidenceFiles';
+import { countOf } from '../../../utils/plural';
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -201,9 +202,9 @@ export const EmployeeImportPage: React.FC = () => {
         {error && <Alert severity="error">{error}</Alert>}
         {result && (
           <Alert severity="success">
-            Importação aplicada: {result.summary.created} novo(s), {result.summary.updated} alterado(s),{' '}
-            {result.summary.terminated + result.summary.terminatedByAbsence} desligado(s), {result.summary.reactivated} reativado(s),{' '}
-            {result.summary.unchanged} sem mudança.
+            Importação aplicada: {countOf(result.summary.created, 'novo', 'novos')}, {countOf(result.summary.updated, 'alterado', 'alterados')},{' '}
+            {countOf(result.summary.terminated + result.summary.terminatedByAbsence, 'desligado', 'desligados')},{' '}
+            {countOf(result.summary.reactivated, 'reativado', 'reativados')}, {formatNumber(result.summary.unchanged)} sem mudança.
           </Alert>
         )}
       </Paper>
@@ -221,7 +222,7 @@ export const EmployeeImportPage: React.FC = () => {
               </Typography>
             )}
             <Typography variant="body2" color="text.secondary">
-              {preview.summary.totalRows} linha(s) · {preview.summary.unchanged} sem mudança · válida até{' '}
+              {countOf(preview.summary.totalRows, 'linha', 'linhas')} · {formatNumber(preview.summary.unchanged)} sem mudança · válida até{' '}
               {new Date(preview.expiresAt).toLocaleTimeString('pt-BR')}
             </Typography>
             {/* Avisos do arquivo inteiro (ex.: coluna opcional ausente) ficam no topo, não só na aba Avisos. */}
@@ -234,7 +235,7 @@ export const EmployeeImportPage: React.FC = () => {
               ))}
             {preview.requiresMassTerminationConfirmation && (
               <Alert severity="warning" role="alert">
-                Esta importação desliga {preview.toTerminate.length} funcionário(s) ausente(s) do arquivo (
+                Esta importação desliga {countOf(preview.toTerminate.length, 'funcionário ausente', 'funcionários ausentes')} do arquivo (
                 {formatPercent(preview.absenceTerminationPercent)} dos {preview.activeBefore} ativos), acima do limite de{' '}
                 {formatPercent(preview.maxTerminationPercent)}. Confira a aba &quot;A desligar&quot; antes de continuar.
                 <Box>
@@ -265,7 +266,7 @@ export const EmployeeImportPage: React.FC = () => {
             </Button>
             {preview.errors.length > 0 && (
               <Typography variant="body2" color="text.secondary">
-                As {preview.errors.length} linha(s) com erro não serão importadas.
+                {preview.errors.length === 1 ? 'A linha com erro não será importada.' : `As ${countOf(preview.errors.length, 'linha', 'linhas')} com erro não serão importadas.`}
               </Typography>
             )}
           </Box>

@@ -325,7 +325,8 @@ public sealed class HistoryImportService : IHistoryImportService
 
         return Result<HistoryImportResultDto>.Ok(
             new HistoryImportResultDto(batch.Id, Summary(counts), plan.ToImport.Count, plan.ToUpdate.Count, created.Count, now),
-            $"Histórico importado: {plan.ToImport.Count} registro(s) novo(s), {plan.ToUpdate.Count} corrigido(s).");
+            $"Histórico importado: {SIGH.Application.Common.PortuguesePlural.Count(plan.ToImport.Count, "registro novo", "registros novos")}, "
+            + $"{SIGH.Application.Common.PortuguesePlural.Count(plan.ToUpdate.Count, "corrigido", "corrigidos")}.");
     }
 
     public async Task<PagedResult<HistoryImportBatchDto>> ListBatchesAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default)

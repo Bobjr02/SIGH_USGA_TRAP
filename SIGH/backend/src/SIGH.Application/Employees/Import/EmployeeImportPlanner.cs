@@ -141,9 +141,11 @@ public static class EmployeeImportPlanner
         {
             var active = group.FirstOrDefault(r => r.Status != EmployeeStatus.Terminated);
             if (active is null) continue;
-            var previous = string.Join(", ", group.Where(r => r != active).Select(r => r.EmployeeNumber));
+            var others = group.Where(r => r != active).Select(r => r.EmployeeNumber).ToList();
+            var previous = string.Join(", ", others);
+            var where = SIGH.Application.Common.PortuguesePlural.Of(others.Count, "na matrícula desligada", "nas matrículas desligadas");
             issues.Add(new HrImportIssue(active.RowNumber, active.EmployeeNumber, HrIssueSeverity.Warning,
-                $"Possível readmissão: o CPF também aparece na(s) matrícula(s) desligada(s) {previous} deste arquivo."));
+                $"Possível readmissão: o CPF também aparece {where} {previous} deste arquivo."));
         }
 
         // 3. Conflitos de CPF com o banco: o CPF não pode ficar em duas matrículas não desligadas.

@@ -36,7 +36,7 @@ public sealed class RecordPendingAlertWorker : BackgroundService
                 using var scope = _scopeFactory.CreateScope();
                 var notified = await scope.ServiceProvider.GetRequiredService<IRecordPendingAlertProcessor>().ProcessAsync(stoppingToken);
                 if (notified > 0)
-                    _logger.LogInformation("[BackgroundWorker] Aviso de medidas pendentes enviado a {Count} aprovador(es).", notified);
+                    _logger.LogInformation("[BackgroundWorker] Aviso de medidas pendentes enviado a {Approvers}.", SIGH.Application.Common.PortuguesePlural.Count(notified, "aprovador", "aprovadores"));
 
                 await Task.Delay(TimeSpan.FromSeconds(Math.Max(60, _options.CheckIntervalInSeconds)), stoppingToken);
             }

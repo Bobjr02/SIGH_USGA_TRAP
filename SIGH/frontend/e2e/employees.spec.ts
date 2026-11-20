@@ -138,7 +138,7 @@ test('SAP import (initial + update), employee with decision support, and a JPG p
   await page.getByRole('tab', { name: 'Apoio à decisão' }).click();
   const box = page.getByRole('region', { name: 'Apoio à decisão' });
   await expect(box).toBeVisible();
-  await expect(box.getByText('3 dia(s) no total')).toBeVisible();
+  await expect(box.getByText('3 dias no total')).toBeVisible();
   await expect(box.getByRole('list', { name: 'Medidas por motivo' })).toContainText('Falta não justificada (E2E): 1');
   await page.getByRole('tab', { name: 'Histórico disciplinar' }).click();
   // Desde o PR #10 o histórico é uma tabela (antes, uma linha do tempo com data-testid="timeline-item").

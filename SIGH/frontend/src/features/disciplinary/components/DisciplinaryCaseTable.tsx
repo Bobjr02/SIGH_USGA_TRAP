@@ -19,6 +19,7 @@ import { Eye, ArrowRight } from 'lucide-react';
 import { DisciplinaryCaseSummaryDto } from '../types';
 import { CaseStatusChip } from './CaseStatusChip';
 import { CaseSeverityChip } from './CaseSeverityChip';
+import { countOf } from '../../../utils/plural';
 
 interface DisciplinaryCaseTableProps {
   data: DisciplinaryCaseSummaryDto[];
@@ -106,10 +107,10 @@ export const DisciplinaryCaseTable: React.FC<DisciplinaryCaseTableProps> = ({
                   <CaseSeverityChip severity={row.priority} />
                 </TableCell>
                 <TableCell>
-                  <Chip label={`${row.occurrencesCount} ocorrência(s)`} size="small" variant="outlined" />
+                  <Chip label={countOf(row.occurrencesCount, 'ocorrência', 'ocorrências')} size="small" variant="outlined" />
                 </TableCell>
                 <TableCell>
-                  <Chip label={`${row.employeesCount} funcionário(s)`} size="small" variant="outlined" />
+                  <Chip label={countOf(row.employeesCount, 'funcionário', 'funcionários')} size="small" variant="outlined" />
                 </TableCell>
                 <TableCell color="text.secondary">
                   {row.openedAt ? new Date(row.openedAt).toLocaleDateString('pt-BR') : '-'}
