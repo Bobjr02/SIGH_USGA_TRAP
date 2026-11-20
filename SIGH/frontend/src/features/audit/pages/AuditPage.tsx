@@ -11,6 +11,7 @@ import { PERMISSIONS } from '../../../auth/permissions';
 import { auditApi, auditKeys, type AuditLogFilters, type AuditMode, type AuditUserOption } from '../api/auditApi';
 import { AuditEntryCard } from '../components/AuditEntryCard';
 import { ACTION_LABELS, ENTITY_LABELS } from '../components/auditFormat';
+import { countOf } from '../../../utils/plural';
 
 /** Registros da auditoria de acesso (espelho de AccessAuditPolicy no backend). */
 export const ACCESS_AUDIT_ENTITIES = ['User', 'UserRole', 'UserManagementUnit', 'ManagementUnit', 'Role', 'Permission', 'RolePermission', 'InfractionType', 'AccessControl'];
@@ -185,7 +186,7 @@ export const AuditPage: React.FC = () => {
 
       {data && (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted">{formatNumber(data.totalCount)} registro(s)</p>
+          <p className="text-sm text-muted">{countOf(data.totalCount, 'registro', 'registros')}</p>
           {data.items.length === 0 ? (
             <div className="rounded-lg border border-line bg-surface">
               <EmptyState message="Nenhum registro para os filtros escolhidos." icon={<ScrollText size={32} />} />

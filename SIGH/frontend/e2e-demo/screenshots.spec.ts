@@ -127,6 +127,30 @@ for (const theme of ['escuro', 'claro'] as const) {
   }
 }
 
+// Quadro "Apoio à decisão" (funcionário 50090007, com histórico) no detalhe do funcionário: largo (a página inteira,
+// painel com a largura do conteúdo) e estreito (painel com 320 px, como no registro de medida), nos dois temas.
+for (const theme of ['escuro', 'claro'] as const) {
+  test(`25-apoio-a-decisao (${theme})`, async ({ page }) => {
+    await login(page, profile('juridico'), theme === 'escuro' ? 'dark' : 'light');
+    await page.goto('/employees');
+    await settle(page);
+    await page.getByRole('textbox', { name: 'Nome ou matrícula', exact: true }).fill('50090007');
+    await page.getByRole('button', { name: 'Filtrar' }).click();
+    await page.getByTestId('employee-row-50090007').getByRole('link', { name: 'Ver funcionário' }).click();
+    await page.getByRole('tab', { name: 'Apoio à decisão' }).click();
+    const panel = page.getByTestId('decision-support');
+    await panel.getByTestId('support-stats').waitFor();
+    await settle(page);
+    await shot(page, `25-apoio-a-decisao-larga-${theme}`);
+
+    await panel.evaluate((el) => {
+      el.style.width = '320px';
+    });
+    await settle(page);
+    await panel.screenshot({ path: path.join(OUT, `25-apoio-a-decisao-estreita-${theme}.png`) });
+  });
+}
+
 // Login lado a lado com a imagem original do logo (conferência do logo oficial).
 test('comparação do logo com o original', async ({ page, browser }) => {
   const login = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });

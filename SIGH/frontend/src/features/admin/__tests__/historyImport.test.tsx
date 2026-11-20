@@ -96,7 +96,7 @@ describe('importação do histórico (/admin/history-import)', () => {
     expect(screen.getByRole('table', { name: 'Avisos' })).toHaveTextContent('planilha 1, recalculado 2');
 
     await user.click(screen.getByRole('button', { name: 'Confirmar importação' }));
-    expect(await screen.findByText(/14 registro\(s\) novo\(s\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/14 registros novos/)).toBeInTheDocument();
     expect(confirm).toHaveBeenCalledWith('batch-1', file);
     expect(screen.getByRole('listitem', { name: 'Passo 3: Confirmar importação (concluído)' })).toBeInTheDocument();
   });
@@ -175,7 +175,7 @@ describe('histórico nas telas de consulta', () => {
     const origins = screen.getByRole('list', { name: 'Medidas por origem' });
     expect(origins).toHaveTextContent('2 advertências — 1 histórica, 1 no SIGH');
     expect(origins).toHaveTextContent('2 suspensões — 2 históricas, 0 no SIGH');
-    expect(screen.getByText(/\+1 suspensão sem dias informados/)).toBeInTheDocument();
+    expect(screen.getAllByTestId('support-stat-hint')[1]).toHaveTextContent('+1 suspensão sem dias informados');
   });
 
   it('records list shows the batch seal and "não informado" days', () => {

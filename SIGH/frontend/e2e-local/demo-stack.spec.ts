@@ -111,6 +111,6 @@ test('demo history: the manager sees the imported history of his unit and the de
   await page.getByTestId('employee-row-50090007').getByRole('link', { name: 'Ver funcionário' }).click();
   await page.getByRole('tab', { name: 'Apoio à decisão' }).click();
   const origins = page.getByRole('region', { name: 'Apoio à decisão' }).getByRole('list', { name: 'Medidas por origem' });
-  await expect(origins).toContainText('1 advertências — 1 histórica, 0 no SIGH');
+  await expect(origins).toContainText('1 advertência — 1 histórica, 0 no SIGH');
   await expect(origins).toContainText('2 suspensões — 2 históricas, 0 no SIGH');
 });

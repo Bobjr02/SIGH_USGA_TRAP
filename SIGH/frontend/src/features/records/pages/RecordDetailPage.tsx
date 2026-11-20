@@ -16,6 +16,7 @@ import { formatDateTime, formatDays } from '../../../utils/formatters';
 import { formatBusinessDate, historySealOf, MeasureType, recordErrorMessage, recordKeys, recordsApi, RecordOrigin, RecordStatus } from '../api/recordsApi';
 import { AttachmentsPanel } from '../components/AttachmentsPanel';
 import { appliedByOf } from '../components/RecordsTable';
+import { plural } from '../../../utils/plural';
 
 type ReasonAction = 'reject' | 'cancel';
 type TabKey = 'dados' | 'anexos' | 'historico';
@@ -163,7 +164,7 @@ export const RecordDetailPage: React.FC = () => {
             <Field label="Medida" value={label('DisciplinaryMeasureType', s.measureType)} />
             <Field label="Motivo" value={s.infractionTypeName} />
             <Field label="Data da medida" value={formatBusinessDate(s.measureDate)} />
-            <Field label="Ocorrência(s)" value={record.occurrenceDates.map(formatBusinessDate).join(', ')} />
+            <Field label={plural(record.occurrenceDates.length, 'Ocorrência', 'Ocorrências')} value={record.occurrenceDates.map(formatBusinessDate).join(', ')} />
             <Field
               label="Vigência"
               value={

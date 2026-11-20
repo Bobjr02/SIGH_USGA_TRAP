@@ -101,7 +101,7 @@ public sealed class ExcelHrSpreadsheetReader : IHrSpreadsheetReader, ISpreadshee
                     ? bestMissing
                     : columns.Where(c => c.Required).Select(c => c.Header).ToList();
                 throw new HrSpreadsheetException(
-                    $"Coluna(s) obrigatória(s) não encontrada(s) no cabeçalho: {string.Join(", ", names.Select(n => $"\"{n}\""))}.");
+                    $"{SIGH.Application.Common.PortuguesePlural.Of(names.Count, "Coluna obrigatória não encontrada", "Colunas obrigatórias não encontradas")} no cabeçalho: {string.Join(", ", names.Select(n => $"\"{n}\""))}.");
             }
 
             return new SheetTable(rows, warnings);

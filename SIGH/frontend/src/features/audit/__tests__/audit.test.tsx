@@ -124,7 +124,7 @@ describe('/audit page', () => {
 
     expect(await screen.findByRole('heading', { name: 'Auditoria' })).toBeInTheDocument();
     expect(within(screen.getByRole('navigation', { name: 'Menu principal' })).getByRole('link', { name: /auditoria/i })).toBeInTheDocument();
-    expect(await screen.findByText('1 registro(s)')).toBeInTheDocument();
+    expect(await screen.findByText('1 registro')).toBeInTheDocument();
     expect(queries[0].get('pageNumber')).toBe('1');
 
     const user = userEvent.setup();

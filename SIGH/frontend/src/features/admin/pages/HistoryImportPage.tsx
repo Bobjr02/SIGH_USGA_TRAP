@@ -31,11 +31,12 @@ import {
   type HistoryPreview,
   type HistoryRow,
 } from '../api/historyImportApi';
-import { formatDateTime } from '../../../utils/formatters';
+import { formatDateTime, formatNumber } from '../../../utils/formatters';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FilePicker } from '../../../components/ui/FilePicker';
 import { ImportSteps } from '../../../components/ui/ImportSteps';
 import { ImportTargetCompany, OtherCompanyFileAlert, useImportCompany } from '../../../components/ui/ImportCompany';
+import { countOf } from '../../../utils/plural';
 
 const formatInstant = (value?: string | null) => formatDateTime(value);
 
@@ -233,7 +234,9 @@ export const HistoryImportPage: React.FC = () => {
       setFile(null);
       setApplied(true);
       setError(null);
-      setMessage(`Histórico importado: ${r.imported} registro(s) novo(s), ${r.updated} corrigido(s), ${r.infractionTypesCreated} motivo(s) criado(s).`);
+      setMessage(
+        `Histórico importado: ${countOf(r.imported, 'registro novo', 'registros novos')}, ${countOf(r.updated, 'corrigido', 'corrigidos')}, ${countOf(r.infractionTypesCreated, 'motivo criado', 'motivos criados')}.`,
+      );
       await refresh();
     },
     onError: (e) => setError(historyErrorMessage(e, 'Não foi possível confirmar.')),
@@ -321,9 +324,11 @@ export const HistoryImportPage: React.FC = () => {
             </Typography>
           )}
           <Typography variant="body2" data-testid="history-summary">
-            {preview.summary.totalRows} linhas com dados: {preview.summary.toImport} a importar, {preview.summary.existing} já existentes,{' '}
-            {preview.summary.toUpdate} a corrigir, {preview.summary.rejected} rejeitadas, {preview.summary.warnings} avisos,{' '}
-            {preview.summary.newInfractionTypes} motivo(s) novo(s), {preview.summary.absent} ausente(s). Confirme até {formatInstant(preview.expiresAt)}.
+            {countOf(preview.summary.totalRows, 'linha', 'linhas')} com dados: {formatNumber(preview.summary.toImport)} a importar,{' '}
+            {countOf(preview.summary.existing, 'já existente', 'já existentes')}, {formatNumber(preview.summary.toUpdate)} a corrigir,{' '}
+            {countOf(preview.summary.rejected, 'rejeitada', 'rejeitadas')}, {countOf(preview.summary.warnings, 'aviso', 'avisos')},{' '}
+            {countOf(preview.summary.newInfractionTypes, 'motivo novo', 'motivos novos')}, {countOf(preview.summary.absent, 'ausente', 'ausentes')}. Confirme
+            até {formatInstant(preview.expiresAt)}.
           </Typography>
           {preview.fileWarnings.map((w) => (
             <Alert key={w} severity="warning">

@@ -80,7 +80,7 @@ export default defineConfig({
     { name: 'setup', testMatch: /setup\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 } },
     {
       name: 'demo',
-      testMatch: /(no-english|accessibility|screenshots)\.spec\.ts/,
+      testMatch: /(no-english|accessibility|screenshots|decision-support)\.spec\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
     },

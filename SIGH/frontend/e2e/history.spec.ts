@@ -49,7 +49,7 @@ test('import employees and history, decision support of 50090007 with history, t
   await page.getByRole('tab', { name: 'Motivos novos (1)' }).click();
   await expect(page.getByRole('list', { name: 'Motivos novos' })).toContainText('USO DE CELULAR EM SERVIÇO');
   await page.getByRole('button', { name: 'Confirmar importação' }).click();
-  await expect(page.getByText(/Histórico importado: 14 registro\(s\) novo\(s\)/)).toBeVisible();
+  await expect(page.getByText(/Histórico importado: 14 registros novos/)).toBeVisible();
   await expect(page.getByTestId('history-batch').first()).toContainText('Aplicado');
 
   // O auxiliar e o encarregado da etapa 4; o auxiliar (RH – Registro) consulta o funcionário: o Administrador importa,
@@ -65,9 +65,9 @@ test('import employees and history, decision support of 50090007 with history, t
   await page.goto(`/employees/${employee.id}`);
   await page.getByRole('tab', { name: 'Apoio à decisão' }).click();
   const support = page.getByRole('region', { name: 'Apoio à decisão' });
-  await expect(support.getByText('4 dia(s) no total')).toBeVisible();
+  await expect(support.getByText('4 dias no total')).toBeVisible();
   const origins = support.getByRole('list', { name: 'Medidas por origem' });
-  await expect(origins).toContainText('1 advertências — 1 histórica, 0 no SIGH');
+  await expect(origins).toContainText('1 advertência — 1 histórica, 0 no SIGH');
   await expect(origins).toContainText('2 suspensões — 2 históricas, 0 no SIGH');
   await page.getByRole('tab', { name: 'Histórico disciplinar' }).click();
   // Desde o PR #10 o histórico é uma tabela: a linha importada mostra "Histórico importado" e o selo "Lote de dd/mm/aaaa".
