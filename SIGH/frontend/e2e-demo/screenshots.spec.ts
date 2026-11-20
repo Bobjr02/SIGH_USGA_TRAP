@@ -61,6 +61,17 @@ const SCREENS: { file: string; who: string; path?: string; detail?: string; prep
   { file: '20-usuarios-modo-todas', who: 'admin.grupo', path: '/admin/usuarios', prepare: (page) => selectCompany(page, 'Todas') },
   { file: '21-importar-funcionarios-modo-todas', who: 'admin.grupo', path: '/employees/import', prepare: (page) => selectCompany(page, 'Todas') },
   { file: '22-importar-historico-modo-todas', who: 'admin.grupo', path: '/admin/history-import', prepare: (page) => selectCompany(page, 'Todas') },
+  // O Administrador só gerencia acessos: a auditoria de acesso e o "Novo usuário" sem senha (link de 48 h por e-mail).
+  { file: '23-auditoria-de-acesso', who: 'admin', path: '/audit' },
+  {
+    file: '24-novo-usuario',
+    who: 'admin',
+    path: '/admin/usuarios',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Novo usuário' }).click();
+      await page.getByRole('dialog', { name: 'Novo usuário' }).getByTestId('setup-link-info').waitFor();
+    },
+  },
 ];
 
 for (const theme of ['escuro', 'claro'] as const) {

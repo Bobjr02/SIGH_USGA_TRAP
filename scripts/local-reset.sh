@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 PROJECT="${SIGH_LOCAL_PROJECT:-sigh-local}"
 # Sem .env.local (já apagado), os segredos não importam para parar/apagar: valores de preenchimento.
 if [ -f .env.local ]; then ENV_ARGS=(--env-file .env.local); else
-  export SIGH_SA_PASSWORD=unused SIGH_JWT_SECRET=unused SIGH_ADMIN_PASSWORD=unused SIGH_DEMO_PASSWORD=unused; ENV_ARGS=(); fi
+  export SIGH_SA_PASSWORD=unused SIGH_JWT_SECRET=unused SIGH_DEMO_PASSWORD=unused; ENV_ARGS=(); fi
 
 echo "Isto apaga TODOS os dados do SIGH local do projeto \"$PROJECT\" (volumes ${PROJECT}_db-data e ${PROJECT}_evidences)."
 read -r -p "Digite APAGAR para confirmar: " answer

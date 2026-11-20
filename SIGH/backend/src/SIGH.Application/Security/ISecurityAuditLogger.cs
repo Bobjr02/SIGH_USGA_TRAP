@@ -13,7 +13,8 @@ public interface ISecurityAuditLogger
         object? details = null,
         CancellationToken cancellationToken = default,
         string? entityName = null,
-        string? entityId = null);
+        string? entityId = null,
+        Guid? companyId = null);
 }
 
 /// <summary>Nomes dos eventos de segurança gravados em AuditLogs.Action.</summary>
@@ -34,4 +35,10 @@ public static class SecurityAuditActions
     public const string ManagementUnitAssigned = "Security.ManagementUnitAssigned";
     public const string ManagementUnitRevoked = "Security.ManagementUnitRevoked";
     public const string RefreshTokensRevoked = "Security.RefreshTokensRevoked";
+    /// <summary>Link de definição de senha enviado (conta criada ou reenvio pela tela de usuários).</summary>
+    public const string AccountSetupLinkSent = "Security.AccountSetupLinkSent";
+    /// <summary>Primeiro administrador da empresa, na publicação (Seed:CompanyAdmins).</summary>
+    public const string CompanyAdminProvisioned = "Security.CompanyAdminProvisioned";
+    /// <summary>Administrador concedido pelo TI na linha de comando (admin-recover).</summary>
+    public const string AdministratorRecovered = "Security.AdministratorRecovered";
 }

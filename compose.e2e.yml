@@ -24,6 +24,8 @@ services:
       ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=${SIGH_E2E_DB_NAME:?Defina SIGH_E2E_DB_NAME};User Id=sa;Password=${SIGH_SA_PASSWORD};TrustServerCertificate=True;"
       Seed__DemoData: "false"
       RateLimits__Login__PermitLimit: "100"
+      # Toda conta criada pelos specs define a senha pelo link do e-mail (reset-password): o padrão (10/15 min) não basta.
+      RateLimits__ResetPassword__PermitLimit: "200"
       # Perda de acesso: cache do SecurityStamp em 2 s (records.spec).
       Auth__SecurityStampCacheSeconds: "2"
       # E-mails (troca de senha, convites) saem em ~3 s, como em Development.

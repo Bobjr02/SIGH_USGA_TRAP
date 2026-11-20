@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { ADMIN_ACCESS_SUBJECT, apiToken, authed, setupLinkFrom, waitForEmail } from './support/helpers';
 
-// Fluxo completo contra API + SQL Server reais. Precisa de um admin recém-criado pelo seed
-// (MustChangePassword = true). Veja e2e/README.md.
+// Fluxo completo contra API + SQL Server reais. O seed cria o primeiro administrador SEM senha conhecida e manda o
+// link de definição por e-mail (Mailpit). Veja e2e/README.md.
 const required = (name: string): string => {
   const value = process.env[name];
   if (!value) throw new Error(`Defina a variável de ambiente ${name} (veja e2e/README.md).`);
@@ -9,14 +10,13 @@ const required = (name: string): string => {
 };
 
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.com.br';
-const ADMIN_PASSWORD = required('E2E_ADMIN_PASSWORD');
-// A troca usa E2E_NEW_PASSWORD; os demais specs (projeto "app") entram com ela.
+// A senha que o admin define pelo link; os demais specs (projeto "app") entram com ela.
 const NEW_PASSWORD = required('E2E_NEW_PASSWORD');
 
 const storageSnapshot = (page: Page) =>
   page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
 
-test('admin: login, mandatory password change, cases list, reload keeps the session, logout', async ({ page, context }) => {
+test('admin: first access through the e-mailed link, users list, no data screens, reload keeps the session, logout', async ({ page, context, request }) => {
   // Nenhuma resposta da API pode trazer o refresh token no corpo.
   const authBodies: string[] = [];
   page.on('response', async (response) => {
@@ -25,32 +25,46 @@ test('admin: login, mandatory password change, cases list, reload keeps the sess
     }
   });
 
-  // 1. Login do admin
+  // 1. Ninguém conhece a senha do admin semeado: ele define a dele pelo link do e-mail (uso único, 48 h).
   await page.goto('/');
   await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('E-mail').fill(ADMIN_EMAIL);
-  await page.getByLabel('Senha', { exact: true }).fill(ADMIN_PASSWORD);
-  await page.getByRole('button', { name: 'Entrar' }).click();
-
-  // 2. Troca obrigatória de senha: qualquer outra rota volta para /change-password
-  await expect(page).toHaveURL(/\/change-password$/);
-  await page.goto('/medidas');
-  await expect(page).toHaveURL(/\/change-password$/);
-
-  await page.getByLabel('Senha atual').fill(ADMIN_PASSWORD);
+  const mail = await waitForEmail(request, ADMIN_EMAIL, ADMIN_ACCESS_SUBJECT);
+  expect(mail.text).toContain('48 horas');
+  expect(mail.text).not.toMatch(/senha( inicial)?:\s*\S/i);
+  await page.goto(setupLinkFrom(mail.text));
   await page.getByLabel('Nova senha', { exact: true }).fill(NEW_PASSWORD);
   await page.getByLabel('Confirmar nova senha').fill(NEW_PASSWORD);
-  await page.getByRole('button', { name: 'Salvar nova senha' }).click();
-  await expect(page).not.toHaveURL(/\/change-password$/);
-  await expect(page.getByTestId('current-user-name')).toBeVisible();
+  await page.getByRole('button', { name: 'Salvar senha' }).click();
+  await expect(page.getByText(/senha (definida|redefinida) com sucesso/i)).toBeVisible();
 
-  // 3. Lista de medidas (a chamada à API tem que funcionar com o token novo)
-  const listResponse = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/v1/disciplinary-records');
-  await page.getByRole('navigation', { name: 'Menu principal' }).getByRole('link', { name: 'Medidas', exact: true }).click();
-  await expect(page).toHaveURL(/\/medidas$/);
+  // 2. Login com a senha definida: sem troca obrigatória.
+  await page.goto('/login');
+  await page.getByLabel('E-mail').fill(ADMIN_EMAIL);
+  await page.getByLabel('Senha', { exact: true }).fill(NEW_PASSWORD);
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await expect(page.getByTestId('current-user-name')).toBeVisible();
+  await expect(page).not.toHaveURL(/\/change-password$/);
+
+  // 3. Lista de usuários (a chamada à API tem que funcionar com o token novo).
+  const listResponse = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/v1/users');
+  await page.getByRole('navigation', { name: 'Menu principal' }).getByRole('link', { name: 'Usuários', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/usuarios$/);
   expect((await listResponse).status()).toBe(200);
-  await expect(page.getByRole('heading', { name: /403/ })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Medidas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Usuários' })).toBeVisible();
+
+  // 4. O Administrador só gerencia acessos: nada de medidas, funcionários, painel nem relatórios.
+  const menu = page.getByRole('navigation', { name: 'Menu principal' });
+  for (const hidden of ['Painel', 'Medidas', 'Funcionários', 'Relatórios']) await expect(menu.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
+  await expect(menu.getByRole('link', { name: 'Auditoria', exact: true })).toBeVisible();
+  const adminToken = await apiToken(request, ADMIN_EMAIL, NEW_PASSWORD);
+  for (const url of ['/api/v1/employees', '/api/v1/disciplinary-records', '/api/v1/disciplinary-records/overview', '/api/v1/audit-logs']) {
+    expect((await request.get(url, { headers: authed(adminToken) })).status(), url).toBe(403);
+  }
+  expect((await request.get('/api/v1/audit-logs/access', { headers: authed(adminToken) })).status()).toBe(200);
+  await page.goto('/medidas');
+  await expect(page.getByRole('heading', { name: /403/ })).toBeVisible();
+  await page.goto('/admin/usuarios');
+  await expect(page.getByRole('heading', { name: 'Usuários' })).toBeVisible();
 
   // O cookie do refresh token é HttpOnly, Secure, SameSite=Strict e restrito a /api/v1/auth.
   const rt = (await context.cookies()).find((c) => c.name === 'sigh_rt');
@@ -70,18 +84,18 @@ test('admin: login, mandatory password change, cases list, reload keeps the sess
   page.on('framenavigated', (frame) => {
     if (frame === page.mainFrame() && frame.url().includes('/login')) visitedLogin.push(frame.url());
   });
-  const reloadListResponse = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/v1/disciplinary-records');
+  const reloadListResponse = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/v1/users');
   await page.reload();
-  await expect(page).toHaveURL(/\/medidas$/);
+  await expect(page).toHaveURL(/\/admin\/usuarios$/);
   expect((await reloadListResponse).status()).toBe(200);
   await expect(page.getByTestId('current-user-name')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Medidas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Usuários' })).toBeVisible();
   expect(visitedLogin).toEqual([]);
 
   // 5. Logout: volta para o login, o cookie some e recarregar não restaura a sessão
   await page.getByRole('button', { name: 'Sair' }).click();
   await expect(page).toHaveURL(/\/login$/);
   expect((await context.cookies()).find((c) => c.name === 'sigh_rt')).toBeUndefined();
-  await page.goto('/medidas');
+  await page.goto('/admin/usuarios');
   await expect(page).toHaveURL(/\/login$/);
 });

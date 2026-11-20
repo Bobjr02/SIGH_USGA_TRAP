@@ -48,5 +48,6 @@
   "Notifications.View",
   "Notifications.Read",
   "Notifications.Manage",
-  "Audit.View"
+  "Audit.View",
+  "Audit.ViewAccess"
 ]

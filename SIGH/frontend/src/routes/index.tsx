@@ -95,7 +95,15 @@ export const AppRoutes: React.FC = () => {
             <Route path="/disciplinary/reports/measures" element={<Navigate to="/relatorios" replace />} />
             <Route path="/disciplinary/reports/employees/:employeeId/history" element={<EmployeeHistoryRedirect />} />
             <Route path="/disciplinary/reports/employees/history" element={<Navigate to="/employees" replace />} />
-            <Route path="/audit" element={guard(PERMISSIONS.AUDIT_VIEW, <AuditPage />)} />
+            {/* Trilha completa (Audit.View) ou só a de acesso (Audit.ViewAccess, do Administrador). */}
+            <Route
+              path="/audit"
+              element={
+                <RequirePermission anyOf={[PERMISSIONS.AUDIT_VIEW, PERMISSIONS.AUDIT_VIEW_ACCESS]}>
+                  <AuditPage />
+                </RequirePermission>
+              }
+            />
             <Route path="/employees" element={guard(PERMISSIONS.EMPLOYEES_VIEW, <EmployeesListPage />)} />
             <Route path="/employees/import" element={consultGuard(PERMISSIONS.EMPLOYEES_IMPORT, <EmployeeImportPage />)} />
             <Route path="/employees/:id" element={guard(PERMISSIONS.EMPLOYEES_VIEW, <EmployeeDetailPage />)} />

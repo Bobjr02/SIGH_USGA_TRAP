@@ -9,11 +9,16 @@ public sealed class AuditLogQueryService : IAuditLogQueryService
 {
     private readonly SighDbContext _context;
     private readonly SIGH.Application.Common.Authorization.IAccessScope? _scope;
+    private readonly SIGH.Application.Common.Authorization.ICompanyContext? _companies;
 
-    public AuditLogQueryService(SighDbContext context, SIGH.Application.Common.Authorization.IAccessScope? scope = null)
+    public AuditLogQueryService(
+        SighDbContext context,
+        SIGH.Application.Common.Authorization.IAccessScope? scope = null,
+        SIGH.Application.Common.Authorization.ICompanyContext? companies = null)
     {
         _context = context;
         _scope = scope;
+        _companies = companies;
     }
 
     public async Task<PagedResult<AuditLogDto>> SearchAsync(AuditLogFilter filter, CancellationToken cancellationToken = default)
@@ -30,6 +35,72 @@ public sealed class AuditLogQueryService : IAuditLogQueryService
                                      || (includeWithoutCompany && a.CompanyId == null));
         }
 
+        query = ApplyCommonFilters(query, filter);
+
+        if (!string.IsNullOrWhiteSpace(filter.Reference))
+        {
+            var ids = await ResolveReferenceAsync(filter.Reference.Trim(), cancellationToken);
+            query = query.Where(a => a.EntityId != null && ids.Contains(a.EntityId));
+        }
+
+        return await PageAsync(query, filter.PageNumber, filter.PageSize, cancellationToken);
+    }
+
+    public async Task<PagedResult<AuditLogDto>> SearchAccessAsync(AuditLogFilter filter, CancellationToken cancellationToken = default)
+    {
+        var entities = AccessAuditPolicy.Entities.ToList();
+        var excluded = AccessAuditPolicy.ExcludedActions.ToList();
+        var query = _context.AuditLogs.AsNoTracking()
+            .Where(a => entities.Contains(a.Entity) && !excluded.Contains(a.Action));
+
+        var (companies, includeWithoutCompany) = await AccessCompaniesAsync(cancellationToken);
+        var people = PeopleOf(companies);
+        // Evento sem empresa (login, troca de senha): só se for de uma pessoa ligada às empresas visíveis, ou para
+        // quem tem a auditoria de acesso em todas as empresas ativas.
+        query = query.Where(a => (a.CompanyId != null && companies.Contains(a.CompanyId.Value))
+                                 || (a.CompanyId == null && (includeWithoutCompany || (a.UserId != null && people.Contains(a.UserId.Value)))));
+
+        query = ApplyCommonFilters(query, filter);
+        return await PageAsync(query, filter.PageNumber, filter.PageSize, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AuditUserOptionDto>> SearchAccessUsersAsync(string? term, CancellationToken cancellationToken = default)
+    {
+        var companies = (await AccessCompaniesAsync(cancellationToken)).Companies;
+        var people = PeopleOf(companies);
+        var query = _context.Users.IgnoreQueryFilters().AsNoTracking().Where(u => people.Contains(u.Id));
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            var t = term.Trim();
+            query = query.Where(u => u.FullName.Contains(t) || u.Email.Contains(t));
+        }
+
+        return await query.OrderBy(u => u.FullName).Take(20)
+            .Select(u => new AuditUserOptionDto(u.Id, u.FullName, u.Email))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Empresas da requisição com Audit.ViewAccess (exigida pela rota) e se os eventos sem empresa entram.</summary>
+    private async Task<(List<Guid> Companies, bool IncludeWithoutCompany)> AccessCompaniesAsync(CancellationToken cancellationToken)
+    {
+        if (_companies is null)
+            return ([], false);
+        var companies = (await _companies.GetRequestGrantsAsync(cancellationToken))
+            .Where(g => g.Has(SIGH.Application.Common.Authorization.PermissionCodes.Audit.ViewAccess))
+            .Select(g => g.CompanyId).ToList();
+        var active = await _context.Companies.AsNoTracking().Where(c => c.IsActive).Select(c => c.Id).ToListAsync(cancellationToken);
+        return (companies, companies.Count > 0 && active.All(companies.Contains));
+    }
+
+    /// <summary>Pessoas ligadas às empresas: perfil nelas (mesmo retirado) ou conta criada nelas.</summary>
+    private IQueryable<Guid> PeopleOf(List<Guid> companies) =>
+        _context.Users.IgnoreQueryFilters()
+            .Where(u => (u.CreatedInCompanyId != null && companies.Contains(u.CreatedInCompanyId.Value))
+                        || _context.UserRoles.IgnoreQueryFilters().Any(ur => ur.UserId == u.Id && companies.Contains(ur.CompanyId)))
+            .Select(u => u.Id);
+
+    private static IQueryable<AuditLog> ApplyCommonFilters(IQueryable<AuditLog> query, AuditLogFilter filter)
+    {
         if (!string.IsNullOrWhiteSpace(filter.EntityName))
             query = query.Where(a => a.Entity == filter.EntityName.Trim());
         if (!string.IsNullOrWhiteSpace(filter.EntityId))
@@ -42,14 +113,7 @@ public sealed class AuditLogQueryService : IAuditLogQueryService
             query = query.Where(a => a.CreatedAt >= filter.From.Value);
         if (filter.To.HasValue)
             query = query.Where(a => a.CreatedAt <= filter.To.Value);
-
-        if (!string.IsNullOrWhiteSpace(filter.Reference))
-        {
-            var ids = await ResolveReferenceAsync(filter.Reference.Trim(), cancellationToken);
-            query = query.Where(a => a.EntityId != null && ids.Contains(a.EntityId));
-        }
-
-        return await PageAsync(query, filter.PageNumber, filter.PageSize, cancellationToken);
+        return query;
     }
 
     /// <summary>

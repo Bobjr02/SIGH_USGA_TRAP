@@ -11,16 +11,16 @@ const refreshStatuses = (page: Page, sink: number[]) =>
   });
 
 const expectLoggedIn = async (page: Page) => {
-  await expect(page).toHaveURL(/\/medidas$/);
+  await expect(page).toHaveURL(/\/admin\/usuarios$/);
   await expect(page.getByTestId('current-user-name')).toBeVisible();
 };
 
 const twoTabsReloadingTogether = async (context: BrowserContext) => {
   const first = await context.newPage();
   await loginUi(first);
-  await first.goto('/medidas');
+  await first.goto('/admin/usuarios');
   const second = await context.newPage();
-  await second.goto('/medidas');
+  await second.goto('/admin/usuarios');
   await expectLoggedIn(second);
 
   const statuses: number[] = [];
@@ -35,7 +35,7 @@ const twoTabsReloadingTogether = async (context: BrowserContext) => {
 
   // Uma terceira aba ainda entra sem login: nada foi revogado.
   const third = await context.newPage();
-  await third.goto('/medidas');
+  await third.goto('/admin/usuarios');
   await expectLoggedIn(third);
 
   return statuses;
@@ -64,9 +64,9 @@ test('without the Web Locks API, the backend grace window still keeps both tabs 
 test('logout in one tab sends the other tab to /login', async ({ context }) => {
   const first = await context.newPage();
   await loginUi(first);
-  await first.goto('/medidas');
+  await first.goto('/admin/usuarios');
   const second = await context.newPage();
-  await second.goto('/medidas');
+  await second.goto('/admin/usuarios');
   await expectLoggedIn(second);
 
   await first.getByRole('button', { name: 'Sair' }).click();

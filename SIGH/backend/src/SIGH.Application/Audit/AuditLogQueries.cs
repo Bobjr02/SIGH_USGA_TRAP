@@ -32,6 +32,26 @@ public record AuditLogDto(
     /// <summary>Empresa do registro (coluna Empresa no modo "Todas"); nulo nos eventos sem empresa (ex.: login).</summary>
     string? CompanyName = null);
 
+/// <summary>
+/// Auditoria de ACESSO (Audit.ViewAccess, do Administrador): só eventos de contas, perfis, gerências de usuários,
+/// gerências, motivos e segurança (login, senha, bloqueio). Nada de funcionário, medida, anexo ou importação.
+/// </summary>
+public static class AccessAuditPolicy
+{
+    /// <summary>Entidades (AuditLogs.Entity) que entram na auditoria de acesso.</summary>
+    public static readonly IReadOnlyCollection<string> Entities =
+    [
+        "User", "UserRole", "UserManagementUnit", "ManagementUnit", "Role", "Permission", "RolePermission",
+        "InfractionType", "AccessControl",
+    ];
+
+    /// <summary>Eventos que nunca entram, mesmo gravados numa entidade de acesso (o download cita a medida).</summary>
+    public static readonly IReadOnlyCollection<string> ExcludedActions =
+    [
+        SIGH.Application.Security.SecurityAuditActions.EvidenceDownloaded,
+    ];
+}
+
 /// <summary>Consulta somente leitura da trilha de auditoria.</summary>
 public interface IAuditLogQueryService
 {
@@ -41,6 +61,16 @@ public interface IAuditLogQueryService
 
     /// <summary>Até 20 usuários cujo nome ou e-mail contém o termo (seletor "Usuário" da auditoria).</summary>
     Task<IReadOnlyList<AuditUserOptionDto>> SearchUsersAsync(string? term, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Auditoria de acesso (<see cref="AccessAuditPolicy"/>): só as empresas da requisição em que o usuário tem
+    /// Audit.ViewAccess. Eventos sem empresa (login, senha) entram se forem de uma pessoa ligada a essas empresas.
+    /// O filtro <see cref="AuditLogFilter.Reference"/> (medida ou matrícula) é ignorado.
+    /// </summary>
+    Task<PagedResult<AuditLogDto>> SearchAccessAsync(AuditLogFilter filter, CancellationToken cancellationToken = default);
+
+    /// <summary>Seletor "Usuário" da auditoria de acesso: pessoas ligadas às empresas com Audit.ViewAccess.</summary>
+    Task<IReadOnlyList<AuditUserOptionDto>> SearchAccessUsersAsync(string? term, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Linha do tempo de um processo: registros do processo e das subentidades (ocorrências,

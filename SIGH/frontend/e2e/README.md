@@ -5,13 +5,13 @@ Roda localmente e no CI (workflow `SIGH E2E`, `.github/workflows/e2e.yml`, em to
 
 | Spec | O que cobre |
 | --- | --- |
-| `auth-flow.spec.ts` | login do admin recém-semeado → troca obrigatória de senha → lista de medidas → reload mantém a sessão → logout; cookie `sigh_rt` HttpOnly/Secure/SameSite=Strict; refresh token fora de corpo e de storage |
+| `auth-flow.spec.ts` | primeiro acesso do admin recém-semeado **pelo link do e-mail** (ninguém conhece a senha; Mailpit) → login → lista de usuários; o admin não tem telas nem rotas de dados (menu sem Medidas/Funcionários/Painel, API 403) → reload mantém a sessão → logout; cookie `sigh_rt` HttpOnly/Secure/SameSite=Strict; refresh token fora de corpo e de storage |
 | `two-tabs.spec.ts` | duas abas recarregando juntas não derrubam a sessão (com Web Locks e sem eles, exercitando a janela de tolerância do backend); logout numa aba leva a outra para `/login` |
 | `evidence.spec.ts` | medida registrada + anexo pela tela da medida; upload de PDF real; `.exe` renomeado para `.pdf` rejeitado; download com SHA-256 igual ao gravado; registros de auditoria (criação, alteração, download) sem dados sensíveis |
-| `password-reset.spec.ts` | "esqueci a senha": o e-mail chega ao Mailpit e o link redefine a senha (uso único) |
-| `employees.spec.ts` | importação SAP (carga + atualização), apoio à decisão com uma suspensão registrada e aprovada pelo fluxo de medidas, foto JPG anexada à medida. Roda antes dos specs abaixo, que usam os funcionários importados |
-| `records.spec.ts` | fluxo completo do RH: o admin cria auxiliar, encarregado e gestor da USGA131 (senha pelo link do e-mail); registro → rejeição → correção → aprovação; gestor da USGA131 vê, da USGA132 não (lista vazia, 404); admin sem botão de aprovar e API 403; quem tem os dois perfis não aprova a própria medida; gestor desativado vai para `/login` na requisição seguinte ao TTL (`Auth__SecurityStampCacheSeconds=2` no e2e) |
-| `multi-company.spec.ts` | multiempresa: o primeiro administrador da Trapiche (do seed, `Seed__Companies__TRAP__*`) importa funcionários fictícios TRAP131/TRAP132; o auxiliar da Trapiche registra uma medida; o encarregado da USGA não a vê (lista e 404) nem aprova; o encarregado da Trapiche aprova; o admin da Trapiche vincula o jurídico da USGA sem criar outra conta e não vê usuários nem funcionários da USGA; o jurídico, em "Todas", vê as duas empresas com a coluna Empresa e recebe 400 `COMPANY_REQUIRED` ao tentar escrever |
+| `password-reset.spec.ts` | conta criada sem senha (link de 48 h); "esqueci a senha": o e-mail chega ao Mailpit e o link redefine a senha (uso único; o link de primeiro acesso também deixa de valer) |
+| `employees.spec.ts` | importação SAP pelo admin (carga + atualização; ele não abre a lista de funcionários: 403), lista, CPF e apoio à decisão vistos por um Jurídico com uma suspensão registrada e aprovada pelo fluxo de medidas, foto JPG anexada à medida. Roda antes dos specs abaixo, que usam os funcionários importados |
+| `records.spec.ts` | fluxo completo do RH: o admin cria auxiliar, encarregado e gestor da USGA131 (senha pelo link do e-mail); registro → rejeição → correção → aprovação; gestor da USGA131 vê, da USGA132 não (lista vazia, 404); admin não vê medidas (403 na tela e na API) nem aprova; quem tem os dois perfis não aprova a própria medida; gestor desativado vai para `/login` na requisição seguinte ao TTL (`Auth__SecurityStampCacheSeconds=2` no e2e) |
+| `multi-company.spec.ts` | multiempresa: o primeiro administrador da Trapiche (do seed, `Seed__CompanyAdmins__0__*`, com a senha definida pelo link do e-mail) importa funcionários fictícios TRAP131/TRAP132; o auxiliar da Trapiche registra uma medida; o encarregado da USGA não a vê (lista e 404) nem aprova; o encarregado da Trapiche aprova; o admin da Trapiche vincula o jurídico da USGA sem criar outra conta e não vê usuários da USGA nem funcionários (de empresa nenhuma: 403); o jurídico, em "Todas", vê as duas empresas com a coluna Empresa e recebe 400 `COMPANY_REQUIRED` ao tentar escrever |
 
 ## Dois alvos
 
@@ -38,8 +38,10 @@ Seletores: por papel e texto acessível (`getByRole`, `getByLabel`); `data-testi
   o setup que o criou (nunca volumes).
 - O `globalTeardown` **apaga o banco desta execução ao final, mesmo se os testes falharem**
   (só nomes `SIGH_E2E_*`; `E2E_KEEP_DB=1` mantém o banco para investigar).
-- A connection string base e a senha inicial do admin vêm dos user-secrets da API
-  (`ConnectionStrings:DefaultConnection`, `Seed:AdminPassword`); nada é versionado.
+- A connection string base vem dos user-secrets da API (`ConnectionStrings:DefaultConnection`); nada é versionado.
+  Nenhum administrador tem senha conhecida: o `auth-flow.spec` define a do admin pelo link do e-mail (Mailpit) e os
+  usuários criados pelos specs fazem o mesmo (`createUserApi`). Consultas a funcionários e medidas usam um Jurídico
+  criado pelo admin (`createReader`): o Administrador não lê dados.
 
 ## Pré-requisitos
 

@@ -68,12 +68,21 @@ services:
       JwtOptions__Issuer: SIGH.Api
       JwtOptions__Audience: SIGH.Client
       Database__ApplyMigrationsOnStartup: "true"
-      Seed__AdminEmail: ${SIGH_ADMIN_EMAIL:-admin@demo.local}
-      Seed__AdminPassword: ${SIGH_ADMIN_PASSWORD:?Rode scripts/local-up para gerar o .env.local}
+      # Primeiro administrador de cada empresa (Seed:CompanyAdmins): criado só se a empresa não tiver nenhum
+      # Administrador vigente, SEM senha; ele define a dele pelo link enviado por e-mail (veja o Mailpit).
+      Seed__CompanyAdmins__0__CompanyCode: USGA
+      Seed__CompanyAdmins__0__Email: ${SIGH_ADMIN_EMAIL:-admin@demo.local}
+      Seed__CompanyAdmins__0__Name: Administrador do Sistema
+      # Trapiche (opcional; na demonstração o admin.trap@demo.local é criado pelo seed de demonstração).
+      Seed__CompanyAdmins__1__CompanyCode: TRAP
+      Seed__CompanyAdmins__1__Email: ${SIGH_TRAP_ADMIN_EMAIL:-}
       Seed__DefaultCompanyName: "Usina Serra Grande S.A. (DEMONSTRAÇÃO)"
-      # Primeiro administrador da Trapiche (opcional; na demonstração o admin.trap@demo.local é criado pelo seed de demonstração).
-      Seed__Companies__TRAP__AdminEmail: ${SIGH_TRAP_ADMIN_EMAIL:-}
-      Seed__Companies__TRAP__AdminPassword: ${SIGH_TRAP_ADMIN_PASSWORD:-}
+      # Contas novas: @usga.com.br e, só na demonstração, os domínios fictícios dos testes.
+      Auth__AllowedEmailDomains__0: usga.com.br
+      Auth__AllowedEmailDomains__1: demo.local
+      Auth__AllowedEmailDomains__2: e2e.local
+      Auth__AllowedEmailDomains__3: sigh.local
+      Auth__AllowedEmailDomains__4: sigh.com.br
       Seed__DemoData: "true"
       Seed__DemoPassword: ${SIGH_DEMO_PASSWORD:?Rode scripts/local-up para gerar o .env.local}
       Seed__DemoDataPath: /demo-data

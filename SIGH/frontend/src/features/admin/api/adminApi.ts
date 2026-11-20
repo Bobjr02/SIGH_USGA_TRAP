@@ -119,6 +119,17 @@ export interface CreateUserInput {
   managementUnitIds: string[];
 }
 
+/** Situação dos administradores de uma empresa (alerta da tela de usuários). */
+export interface AdministratorStatus {
+  companyCode: string;
+  companyName: string;
+  currentAdministrators: number;
+  /** Quando termina o acesso do último administrador (nulo se algum não tem prazo). */
+  lastValidUntil?: string | null;
+  singleAdministrator: boolean;
+  endingSoon: boolean;
+}
+
 export interface Validity {
   validFrom?: string | null;
   validUntil?: string | null;
@@ -130,6 +141,7 @@ export const adminKeys = {
   access: (id: string) => ['admin', 'access', id] as const,
   roles: ['admin', 'roles'] as const,
   units: ['admin', 'management-units'] as const,
+  adminStatus: ['admin', 'admin-status'] as const,
 };
 
 export const adminApi = {
@@ -146,8 +158,20 @@ export const adminApi = {
   },
 
   async createUser(input: CreateUserInput): Promise<{ id: string }> {
-    const response = await api.post<Result<{ id: string }>>('/v1/users', { ...input, initialPassword: null });
+    // Sem senha: a pessoa recebe por e-mail o link de definição (uso único, 48 h).
+    const response = await api.post<Result<{ id: string }>>('/v1/users', input);
     return unwrap(response.data, 'Erro ao criar o usuário.');
+  },
+
+  /** Reenvia o link de definição de senha (o anterior deixa de valer). Só para quem ainda não definiu a senha. */
+  async resendSetupLink(id: string): Promise<{ email: string; validHours: number }> {
+    const response = await api.post<Result<{ email: string; validHours: number }>>(`/v1/users/${id}/setup-link`);
+    return unwrap(response.data, 'Erro ao reenviar o link.');
+  },
+
+  async administratorStatus(): Promise<AdministratorStatus[]> {
+    const response = await api.get<Result<AdministratorStatus[]>>('/v1/users/admin-status');
+    return unwrap(response.data, 'Erro ao carregar a situação dos administradores.');
   },
 
   /** Vincula à empresa ativa uma conta que já existe (outra empresa do grupo), com perfis nesta empresa. */

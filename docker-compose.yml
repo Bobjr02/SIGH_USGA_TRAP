@@ -55,8 +55,9 @@ services:
       JwtOptions__SecretKey: ${JwtOptions__SecretKey:-}
       JwtOptions__Issuer: ${JwtOptions__Issuer:-SIGH.Api}
       JwtOptions__Audience: ${JwtOptions__Audience:-SIGH.Client}
+      # Primeiro administrador da USGA (sem senha: recebe o link de definição por e-mail). Para outras empresas,
+      # Seed__CompanyAdmins__N__CompanyCode / __Email / __Name (veja o README).
       Seed__AdminEmail: ${Seed__AdminEmail:-}
-      Seed__AdminPassword: ${Seed__AdminPassword:-}
       Database__ApplyMigrationsOnStartup: "true"
       Storage__Local__RootPath: /var/lib/sigh/evidences
       Email__Enabled: "true"

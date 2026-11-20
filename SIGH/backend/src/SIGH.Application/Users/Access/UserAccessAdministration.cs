@@ -101,6 +101,19 @@ public static class UserAccessRules
             .Select(ur => ur.UserId)
             .Distinct();
 
+    /// <summary>
+    /// Administradores VIGENTES da empresa: perfil Administrator vigente agora e conta utilizável (ativa, aguardando o
+    /// primeiro acesso ou bloqueada temporariamente; não inativa nem suspensa). Usado pelo primeiro administrador da
+    /// publicação (Seed:CompanyAdmins) e pelo alerta da tela de usuários.
+    /// </summary>
+    public static IQueryable<UserRole> CurrentAdministratorAssignments(IApplicationDbContext db, DateTimeOffset now, Guid companyId) =>
+        db.UserRoles
+            .Where(ur => ur.CompanyId == companyId && ur.Role.Name == SystemRoles.Administrator && !ur.Role.IsDeleted
+                         && (ur.ValidFrom == null || ur.ValidFrom <= now)
+                         && (ur.ValidUntil == null || ur.ValidUntil > now)
+                         && !ur.User.IsDeleted
+                         && ur.User.Status != UserStatus.Inactive && ur.User.Status != UserStatus.Suspended);
+
     /// <summary>Lança se <paramref name="targetUserId"/> for o único Administrador ativo da empresa.</summary>
     public static async Task EnsureNotLastActiveAdministratorAsync(IApplicationDbContext db, Guid targetUserId, DateTimeOffset now, Guid companyId, CancellationToken cancellationToken)
     {

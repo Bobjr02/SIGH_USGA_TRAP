@@ -116,6 +116,11 @@ export const FIELD_LABELS: Record<string, string> = {
   entity: 'Registro',
   action: 'Ação',
   id: 'Identificador',
+  // Primeiro administrador e recuperação pelo TI.
+  origin: 'Origem',
+  company: 'Empresa',
+  accountCreated: 'Conta criada',
+  reactivated: 'Conta reativada',
 };
 
 export const fieldLabel = (field: string) => FIELD_LABELS[field] ?? FIELD_LABELS[field.charAt(0).toUpperCase() + field.slice(1)] ?? humanize(field);

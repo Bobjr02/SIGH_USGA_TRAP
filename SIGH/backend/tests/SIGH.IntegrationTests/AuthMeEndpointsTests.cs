@@ -68,6 +68,7 @@ public class AuthMeEndpointsTests : IntegrationTestBase
     [Fact]
     public async Task Me_IsAllowedWhilePasswordChangeIsRequired()
     {
+        await Factory.GiveSeedAdminLegacyPasswordAsync();
         using var client = await CreateAuthenticatedClientAsync(CustomWebApplicationFactory.SeedAdminEmail, CustomWebApplicationFactory.SeedAdminPassword);
 
         var response = await client.GetAsync("/api/v1/auth/me");

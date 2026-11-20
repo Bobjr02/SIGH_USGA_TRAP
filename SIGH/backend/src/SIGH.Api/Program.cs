@@ -22,7 +22,9 @@ try
 {
     Log.Information("Iniciando a aplicação SIGH.Api...");
 
-    var builder = WebApplication.CreateBuilder(args);
+    // Comando de linha (recuperação de administrador pelo TI): usa a mesma configuração, mas não sobe o servidor web.
+    var isCliCommand = SIGH.Api.Cli.AdminRecoveryCommand.IsCommand(args);
+    var builder = WebApplication.CreateBuilder(isCliCommand ? [] : args);
 
     // Configuração do Serilog
     builder.Host.UseSerilog((context, services, configuration) => configuration
@@ -191,6 +193,12 @@ try
     // Fail-fast: valida JwtOptions e ConnectionStrings (ValidateOnStart) antes das
     // migrations, para que configuração ausente gere uma mensagem clara e não um erro de conexão.
     app.Services.GetService<Microsoft.Extensions.Options.IStartupValidator>()?.Validate();
+
+    if (isCliCommand)
+    {
+        Environment.ExitCode = await SIGH.Api.Cli.AdminRecoveryCommand.RunAsync(app.Services, args, Console.Out);
+        return;
+    }
 
     // Migrations + seed na inicialização (habilitado em Development).
     // Provedores não relacionais (ex.: InMemory nos testes) são ignorados.

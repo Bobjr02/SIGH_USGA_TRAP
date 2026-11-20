@@ -428,9 +428,15 @@ public class MultiCompanyRulesTests : IntegrationTestBase
     public async Task AuditTrail_ShowsOnlyTheCompaniesWithAuditView()
     {
         var (usgaRecord, trapRecord) = await RecordsInBothCompaniesAsync();
-        using var trapAdmin = await AccessTestHelpers.LoginAsync(Factory, "admin.trap@sigh.test");
-        var trapAudit = await trapAdmin.GetStringAsync("/api/v1/audit-logs?pageSize=200");
+        await AccessTestHelpers.CreateUserAsync(Factory, "juridico.trap@sigh.test", [new RoleGrant(SystemRoles.Legal, CompanyId: Trap)]);
+        using var trapLegal = await AccessTestHelpers.LoginAsync(Factory, "juridico.trap@sigh.test");
+        var trapAudit = await trapLegal.GetStringAsync("/api/v1/audit-logs?pageSize=200");
         trapAudit.Should().Contain(trapRecord.ToString()).And.NotContain(usgaRecord.ToString());
+
+        // O Administrador da Trapiche só tem a auditoria de acesso: nenhuma medida, de empresa nenhuma.
+        using var trapAdmin = await AccessTestHelpers.LoginAsync(Factory, "admin.trap@sigh.test");
+        (await trapAdmin.GetAsync("/api/v1/audit-logs?pageSize=200")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await trapAdmin.GetStringAsync("/api/v1/audit-logs/access?pageSize=200")).Should().NotContain(trapRecord.ToString()).And.NotContain(usgaRecord.ToString());
 
         await AccessTestHelpers.CreateUserAsync(Factory, "juridico.duas@sigh.test",
             [new RoleGrant(SystemRoles.Legal, CompanyId: Usga), new RoleGrant(SystemRoles.Legal, CompanyId: Trap)]);

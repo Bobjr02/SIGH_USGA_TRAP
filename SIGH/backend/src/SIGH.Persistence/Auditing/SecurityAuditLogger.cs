@@ -24,11 +24,13 @@ public sealed class SecurityAuditLogger : ISecurityAuditLogger
         object? details = null,
         CancellationToken cancellationToken = default,
         string? entityName = null,
-        string? entityId = null)
+        string? entityId = null,
+        Guid? companyId = null)
     {
         _context.AuditLogs.Add(new AuditLog
         {
-            CompanyId = _context.ActiveCompanyId,
+            // Sem empresa explícita, a ativa da requisição (nula fora de requisição e no login).
+            CompanyId = companyId ?? _context.ActiveCompanyId,
             Action = action,
             Entity = entityName ?? nameof(User),
             EntityId = entityId ?? userId?.ToString(),

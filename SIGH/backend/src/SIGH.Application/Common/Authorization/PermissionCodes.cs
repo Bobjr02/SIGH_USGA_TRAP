@@ -98,7 +98,11 @@ public static class PermissionCodes
 
     public static class Audit
     {
+        /// <summary>Trilha completa (inclui medidas e funcionários): Jurídico.</summary>
         public const string View = "Audit.View";
+
+        /// <summary>Só os eventos de acesso e segurança (contas, perfis, gerências, motivos, logins): Administrador.</summary>
+        public const string ViewAccess = "Audit.ViewAccess";
     }
 
     public static class Notifications
@@ -179,5 +183,6 @@ public static class PermissionCodes
 
         // Auditoria
         new(Audit.View, "Consultar auditoria", "Consultar a trilha de auditoria do sistema."),
+        new(Audit.ViewAccess, "Consultar auditoria de acesso", "Consultar só os eventos de acesso e segurança: contas, perfis, gerências, motivos, logins e senhas (sem dados de funcionários nem de medidas)."),
     };
 }

@@ -7,6 +7,8 @@ using SIGH.Domain.Entities;
 using SIGH.Domain.Enums;
 using SIGH.Domain.Exceptions;
 using SIGH.Domain.Repositories;
+using SIGH.Application.Security;
+using SIGH.Application.Users.SetupLink;
 
 namespace SIGH.Application.Users.CreateUser;
 
@@ -15,53 +17,34 @@ public class CreateUserService : ICreateUserService
     private readonly IApplicationDbContext _context;
     private readonly IUserRepository _userRepository;
     private readonly IPasswordHasher _passwordHasher;
-    private readonly PasswordOptions _passwordOptions;
-    private readonly SIGH.Application.Authentication.PasswordTokens.IPasswordTokenService? _tokens;
-    private readonly SIGH.Application.Email.IEmailOutbox? _outbox;
-    private readonly IRandomStringGenerator? _random;
-    private readonly AppOptions _appOptions;
+    private readonly IAccountSetupLinkSender _links;
+    private readonly IRandomStringGenerator _random;
+    private readonly AuthOptions _authOptions;
     private readonly SIGH.Application.Common.Authorization.ICompanyContext? _companies;
+    private readonly ISecurityAuditLogger? _audit;
 
     public CreateUserService(
         IApplicationDbContext context,
         IUserRepository userRepository,
         IPasswordHasher passwordHasher,
-        IOptions<PasswordOptions> passwordOptions,
-        SIGH.Application.Authentication.PasswordTokens.IPasswordTokenService? tokens = null,
-        SIGH.Application.Email.IEmailOutbox? outbox = null,
-        IRandomStringGenerator? random = null,
-        IOptions<AppOptions>? appOptions = null,
-        SIGH.Application.Common.Authorization.ICompanyContext? companies = null)
+        IAccountSetupLinkSender links,
+        IRandomStringGenerator random,
+        IOptions<AuthOptions> authOptions,
+        SIGH.Application.Common.Authorization.ICompanyContext? companies = null,
+        ISecurityAuditLogger? audit = null)
     {
-        _companies = companies;
-        _tokens = tokens;
-        _outbox = outbox;
-        _random = random;
-        _appOptions = appOptions?.Value ?? new AppOptions();
         _context = context;
         _userRepository = userRepository;
         _passwordHasher = passwordHasher;
-        _passwordOptions = passwordOptions.Value;
+        _links = links;
+        _random = random;
+        _authOptions = authOptions.Value;
+        _companies = companies;
+        _audit = audit;
     }
 
     public async Task<CreateUserResponse> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
     {
-        // Senha inicial opcional. Sem ela, a conta recebe uma senha aleatória que ninguém conhece:
-        // o acesso só é possível pelo link de definição de senha enviado por e-mail.
-        var hasInitialPassword = !string.IsNullOrWhiteSpace(request.InitialPassword);
-        if (hasInitialPassword)
-        {
-            var (isValid, errorMessage) = PasswordComplexityValidator.Validate(request.InitialPassword!, _passwordOptions);
-            if (!isValid)
-            {
-                throw new BusinessRuleValidationException(errorMessage);
-            }
-        }
-        else if (_random is null)
-        {
-            throw new BusinessRuleValidationException("A senha inicial é obrigatória.");
-        }
-
         var email = request.Email.Trim().ToLowerInvariant();
         var cpf = request.Cpf.Trim();
 
@@ -81,6 +64,11 @@ public class CreateUserService : ICreateUserService
                 throw new ExistingUserCanBeLinkedException();
             throw new BusinessRuleValidationException("Já existe um usuário cadastrado com este e-mail corporativo.");
         }
+
+        // Contas NOVAS só com e-mail corporativo (Auth:AllowedEmailDomains; padrão @usga.com.br). Uma conta que já
+        // existe continua podendo ser vinculada (acima), seja qual for o domínio.
+        if (!_authOptions.IsEmailDomainAllowed(email))
+            throw new BusinessRuleValidationException(_authOptions.EmailDomainMessage());
 
         bool cpfExists = await _userRepository.ExistsByCpfAsync(cpf, cancellationToken);
         if (cpfExists)
@@ -116,7 +104,8 @@ public class CreateUserService : ICreateUserService
                 throw new BusinessRuleValidationException("Uma ou mais gerências informadas não existem.");
         }
 
-        var passwordHash = _passwordHasher.HashPassword(hasInitialPassword ? request.InitialPassword! : _random!.GenerateRandomString(64));
+        // Senha aleatória que ninguém conhece: o acesso só é possível pelo link de definição de senha do e-mail.
+        var passwordHash = _passwordHasher.HashPassword(_random.GenerateRandomString(64));
 
         var user = new User
         {
@@ -153,20 +142,14 @@ public class CreateUserService : ICreateUserService
 
         await _userRepository.AddAsync(user, cancellationToken);
 
-        // E-mail de conta criada, com link de definição de senha (nunca a senha). Mesma transação.
-        if (_tokens is not null && _outbox is not null)
-        {
-            var rawToken = await _tokens.IssueAsync(user.Id, PasswordTokenPurpose.AccountSetup, cancellationToken);
-            var hours = (int)_tokens.LifetimeOf(PasswordTokenPurpose.AccountSetup).TotalHours;
-            _outbox.Enqueue(user.Email, SIGH.Application.Email.EmailTemplates.AccountCreated(
-                user.FullName,
-                user.Email,
-                _appOptions.BuildUrl($"/reset-password?token={Uri.EscapeDataString(rawToken)}&setup=1"),
-                hours,
-                _appOptions.BuildUrl("/login")));
-        }
+        // E-mail de conta criada, com o link de definição de senha (nunca a senha). Mesma transação.
+        await _links.SendAccountCreatedAsync(user, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (_audit is not null)
+            await _audit.RecordAsync(SecurityAuditActions.AccountSetupLinkSent, null,
+                new { reason = "conta criada", email = user.Email }, cancellationToken, entityName: nameof(User), entityId: user.Id.ToString());
 
         return new CreateUserResponse(
             user.Id,

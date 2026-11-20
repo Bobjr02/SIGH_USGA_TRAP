@@ -20,7 +20,7 @@ if ($answer -cne 'APAGAR') {
 
 $envArgs = @()
 if (Test-Path '.env.local') { $envArgs = @('--env-file', '.env.local') }
-else { $env:SIGH_SA_PASSWORD = 'unused'; $env:SIGH_JWT_SECRET = 'unused'; $env:SIGH_ADMIN_PASSWORD = 'unused'; $env:SIGH_DEMO_PASSWORD = 'unused' }
+else { $env:SIGH_SA_PASSWORD = 'unused'; $env:SIGH_JWT_SECRET = 'unused'; $env:SIGH_DEMO_PASSWORD = 'unused' }
 
 & docker compose -p $Project -f compose.app.yml @envArgs down --volumes --remove-orphans
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

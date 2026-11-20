@@ -50,6 +50,10 @@ public static class DependencyInjection
         services.AddScoped<IChangePasswordService, ChangePasswordService>();
         services.AddScoped<SIGH.Application.Authentication.CurrentUser.IGetCurrentUserService, SIGH.Application.Authentication.CurrentUser.GetCurrentUserService>();
         services.AddScoped<ICreateUserService, CreateUserService>();
+        services.AddScoped<SIGH.Application.Users.SetupLink.IAccountSetupLinkSender, SIGH.Application.Users.SetupLink.AccountSetupLinkSender>();
+        services.AddScoped<SIGH.Application.Users.SetupLink.IResendSetupLinkService, SIGH.Application.Users.SetupLink.ResendSetupLinkService>();
+        services.AddScoped<SIGH.Application.Users.Bootstrap.ICompanyAdminProvisioner, SIGH.Application.Users.Bootstrap.CompanyAdminProvisioner>();
+        services.AddScoped<SIGH.Application.Users.Access.IAdministratorStatusService, SIGH.Application.Users.Access.AdministratorStatusService>();
         services.Configure<SIGH.Application.Employees.Import.ImportOptions>(configuration.GetSection(SIGH.Application.Employees.Import.ImportOptions.SectionName));
         services.AddScoped<SIGH.Application.Employees.Import.IEmployeeImportService, SIGH.Application.Employees.Import.EmployeeImportService>();
         services.AddScoped<SIGH.Application.Employees.DecisionSupport.IEmployeeDecisionSupportService, SIGH.Application.Employees.DecisionSupport.EmployeeDecisionSupportService>();

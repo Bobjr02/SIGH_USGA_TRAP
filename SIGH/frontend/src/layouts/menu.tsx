@@ -19,6 +19,8 @@ export interface MenuItem {
   label: string;
   path: string;
   permission: PermissionCode;
+  /** Também aparece com qualquer uma destas (ex.: Auditoria: trilha completa ou só a de acesso). */
+  alsoWith?: PermissionCode[];
   icon: React.ReactNode;
   /** Item ativo para estes caminhos (padrão: o próprio caminho e os filhos). */
   isActive?: (pathname: string) => boolean;
@@ -57,7 +59,13 @@ export const MAIN_MENU: MenuItem[] = [
     isActive: (p) => under('/employees')(p) && !p.startsWith('/employees/import'),
   },
   { label: 'Relatórios', path: '/relatorios', permission: PERMISSIONS.DISCIPLINARY_REPORTS_VIEW_MEASURES, icon: <BarChart3 size={19} /> },
-  { label: 'Auditoria', path: '/audit', permission: PERMISSIONS.AUDIT_VIEW, icon: <ScrollText size={19} /> },
+  {
+    label: 'Auditoria',
+    path: '/audit',
+    permission: PERMISSIONS.AUDIT_VIEW,
+    alsoWith: [PERMISSIONS.AUDIT_VIEW_ACCESS],
+    icon: <ScrollText size={19} />,
+  },
 ];
 
 /** Grupo "Administração". "Motivos" (catálogo de tipos de infração) fica aqui para não sumir do menu. */

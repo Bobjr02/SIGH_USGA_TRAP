@@ -83,6 +83,25 @@ public class EmployeeImportTests : IntegrationTestBase
         batch.AppliedByUserId.Should().Be(CustomWebApplicationFactory.AdminUserId);
     }
 
+    /// <summary>
+    /// O perfil Administrador (sem acesso a dados de funcionários) continua importando: a pré-visualização compara com
+    /// a base inteira da empresa, então reimportar o mesmo arquivo não muda nada.
+    /// </summary>
+    [Fact]
+    public async Task TheAdministratorProfileAlone_StillImports_AgainstTheWholeCompanyBase()
+    {
+        await AccessTestHelpers.CreateUserAsync(Factory, "so.admin.importa@sigh.test", SIGH.Application.Common.Authorization.SystemRoles.Administrator);
+        using var admin = await AccessTestHelpers.LoginAsync(Factory, "so.admin.importa@sigh.test", SIGH.Application.Common.Authorization.CompanyDefaults.UsgaCode);
+
+        await ImportAsync(admin, InitialLoad());
+        (await CountEmployeesAsync()).Should().Be(5);
+
+        var again = await PreviewAsync(admin, InitialLoad());
+        again.Summary.Created.Should().Be(0);
+        again.Summary.Unchanged.Should().Be(5);
+        (await admin.GetAsync("/api/v1/employees")).StatusCode.Should().Be(HttpStatusCode.Forbidden, "importar não dá acesso à consulta de funcionários");
+    }
+
     [Fact]
     public async Task UpdateFile_ProducesUpdatesTerminationsAbsencesReactivationsAndReadmissionWarnings()
     {

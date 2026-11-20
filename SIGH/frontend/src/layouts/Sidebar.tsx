@@ -56,7 +56,8 @@ const NavItem: React.FC<{ item: MenuItem; collapsed: boolean; onNavigate?: () =>
 export const Sidebar: React.FC<{ collapsed: boolean; onNavigate?: () => void }> = ({ collapsed, onNavigate }) => {
   const navigate = useNavigate();
   const { user, hasPermission, canConsult, logout } = useAuth();
-  const visible = (i: MenuItem) => (i.consultInAll ? canConsult(i.permission) : hasPermission(i.permission));
+  const visible = (i: MenuItem) =>
+    (i.consultInAll ? canConsult(i.permission) : hasPermission(i.permission)) || (i.alsoWith ?? []).some((p) => hasPermission(p));
   const { mode, toggleTheme } = useThemeContext();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const main = MAIN_MENU.filter(visible);

@@ -6,23 +6,38 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 import { PaginationBar } from '../../../components/ui/DataTable';
 import { EmptyState, ErrorState } from '../../../components/ui/States';
 import { formatNumber } from '../../../utils/formatters';
-import { auditApi, auditKeys, type AuditLogFilters, type AuditUserOption } from '../api/auditApi';
+import { useAuth } from '../../../hooks/useAuth';
+import { PERMISSIONS } from '../../../auth/permissions';
+import { auditApi, auditKeys, type AuditLogFilters, type AuditMode, type AuditUserOption } from '../api/auditApi';
 import { AuditEntryCard } from '../components/AuditEntryCard';
 import { ACTION_LABELS, ENTITY_LABELS } from '../components/auditFormat';
+
+/** Registros da auditoria de acesso (espelho de AccessAuditPolicy no backend). */
+export const ACCESS_AUDIT_ENTITIES = ['User', 'UserRole', 'UserManagementUnit', 'ManagementUnit', 'Role', 'Permission', 'RolePermission', 'InfractionType', 'AccessControl'];
+const isAccessAction = (action: string) =>
+  ['Created', 'Updated', 'Deleted', 'SoftDeleted'].includes(action) || (action.startsWith('Security.') && action !== 'Security.EvidenceDownloaded');
+
+/** Trilha completa (Audit.View) ou só a de acesso (Audit.ViewAccess, do Administrador). */
+export const useAuditMode = (): AuditMode | null => {
+  const { hasPermission } = useAuth();
+  if (hasPermission(PERMISSIONS.AUDIT_VIEW)) return 'full';
+  if (hasPermission(PERMISSIONS.AUDIT_VIEW_ACCESS)) return 'access';
+  return null;
+};
 
 const PAGE_SIZE = 25;
 
 const toIso = (local: string, endOfMinute = false) => (local ? new Date(local + (endOfMinute ? ':59' : '')).toISOString() : undefined);
 
 /** Seletor de usuário com busca por nome (no lugar do "Id do usuário"). */
-const UserPicker: React.FC<{ value: AuditUserOption | null; onChange: (u: AuditUserOption | null) => void }> = ({ value, onChange }) => {
+const UserPicker: React.FC<{ value: AuditUserOption | null; onChange: (u: AuditUserOption | null) => void; mode: AuditMode }> = ({ value, onChange, mode }) => {
   const [input, setInput] = useState('');
   const [debounced, setDebounced] = useState('');
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(input.trim()), 250);
     return () => window.clearTimeout(t);
   }, [input]);
-  const users = useQuery({ queryKey: auditKeys.users(debounced), queryFn: () => auditApi.users(debounced), staleTime: 60_000 });
+  const users = useQuery({ queryKey: auditKeys.users(debounced, mode), queryFn: () => auditApi.users(debounced, mode), staleTime: 60_000 });
 
   return (
     <Autocomplete
@@ -57,15 +72,23 @@ const UserPicker: React.FC<{ value: AuditUserOption | null; onChange: (u: AuditU
   );
 };
 
-/** Consulta geral da trilha de auditoria (Audit.View), com filtros legíveis. */
+/**
+ * Consulta da trilha de auditoria, com filtros legíveis. Com Audit.View (Jurídico), a trilha completa; com só
+ * Audit.ViewAccess (Administrador), a auditoria de ACESSO: contas, perfis, gerências, motivos e eventos de segurança,
+ * sem busca por medida ou matrícula e sem nenhum dado de funcionário ou de medida.
+ */
 export const AuditPage: React.FC = () => {
+  const mode = useAuditMode() ?? 'access';
+  const accessOnly = mode === 'access';
+  const entities = Object.entries(ENTITY_LABELS).filter(([value]) => !accessOnly || ACCESS_AUDIT_ENTITIES.includes(value));
+  const actions = Object.entries(ACTION_LABELS).filter(([value]) => !accessOnly || isAccessAction(value));
   const empty = { entityName: '', reference: '', user: null as AuditUserOption | null, action: '', from: '', to: '' };
   const [draft, setDraft] = useState(empty);
   const [filters, setFilters] = useState<AuditLogFilters>({ pageNumber: 1, pageSize: PAGE_SIZE });
 
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
-    queryKey: auditKeys.search(filters),
-    queryFn: () => auditApi.search(filters),
+    queryKey: auditKeys.search(filters, mode),
+    queryFn: () => auditApi.search(filters, mode),
     placeholderData: keepPreviousData,
   });
 
@@ -88,25 +111,35 @@ export const AuditPage: React.FC = () => {
 
   return (
     <div>
-      <PageHeader icon={<ScrollText size={22} />} title="Auditoria" subtitle="Trilha de alterações e eventos de segurança do sistema" />
+      <PageHeader
+        icon={<ScrollText size={22} />}
+        title={accessOnly ? 'Auditoria de acesso' : 'Auditoria'}
+        subtitle={
+          accessOnly
+            ? 'Contas, perfis, gerências, motivos e eventos de segurança (sem dados de funcionários nem de medidas)'
+            : 'Trilha de alterações e eventos de segurança do sistema'
+        }
+      />
 
       <form
         onSubmit={apply}
         aria-label="Filtros da auditoria"
         className="mb-4 grid grid-cols-1 gap-3 rounded-lg border border-line bg-surface p-4 shadow-card sm:grid-cols-2 lg:grid-cols-3"
       >
-        <TextField
-          size="small"
-          label="Medida ou matrícula"
-          placeholder="MED-2026-… ou 50090006"
-          value={draft.reference}
-          onChange={set('reference')}
-          helperText="Número da medida (MED-…) ou matrícula do funcionário"
-        />
-        <UserPicker value={draft.user} onChange={(user) => setDraft((d) => ({ ...d, user }))} />
+        {!accessOnly && (
+          <TextField
+            size="small"
+            label="Medida ou matrícula"
+            placeholder="MED-2026-… ou 50090006"
+            value={draft.reference}
+            onChange={set('reference')}
+            helperText="Número da medida (MED-…) ou matrícula do funcionário"
+          />
+        )}
+        <UserPicker mode={mode} value={draft.user} onChange={(user) => setDraft((d) => ({ ...d, user }))} />
         <TextField select size="small" label="Registro" value={draft.entityName} onChange={set('entityName')}>
           <MenuItem value="">Todos</MenuItem>
-          {Object.entries(ENTITY_LABELS)
+          {entities
             .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
             .map(([value, text]) => (
               <MenuItem key={value} value={value}>
@@ -116,7 +149,7 @@ export const AuditPage: React.FC = () => {
         </TextField>
         <TextField select size="small" label="Ação" value={draft.action} onChange={set('action')}>
           <MenuItem value="">Todas</MenuItem>
-          {Object.entries(ACTION_LABELS).map(([value, text]) => (
+          {actions.map(([value, text]) => (
             <MenuItem key={value} value={value}>
               {text}
             </MenuItem>

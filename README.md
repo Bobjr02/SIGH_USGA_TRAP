@@ -130,9 +130,13 @@ Abra **http://localhost:8080** (Chrome ou Edge). A senha dos usuários abaixo é
 | `preposto@demo.local` | USGA · RH – Registro + RH – Aprovador | A fila de aprovação e as próprias medidas (não aprova as que ele mesmo registrar) |
 | `admin.usga@demo.local`, `auxiliar.usga@demo.local`, `encarregado.usga@demo.local`, `gestor.usga131@demo.local` | USGA · Administrador, RH – Registro, RH – Aprovador, Gestor da USGA131 | Os mesmos papéis acima, com o nome da empresa na faixa do topo |
 | `admin.grupo@demo.local` | **USGA e Trapiche** · Administrador | O seletor **Empresa**; em **Todas**, **Usuários** com a coluna Empresa e as telas de importação só para consulta (lotes das duas empresas com a coluna Empresa e o aviso **"Selecione uma empresa"**, sem envio de arquivo) |
-| `admin.trap@demo.local` | Trapiche · Administrador | Só os usuários e os dados da Trapiche; em **Usuários → Novo usuário** com o e-mail de alguém da USGA, a opção **Vincular este usuário à Trapiche** |
+| `admin.trap@demo.local` | Trapiche · Administrador | Só os usuários da Trapiche; em **Usuários → Novo usuário** com o e-mail de alguém da USGA, a opção **Vincular este usuário à Trapiche** |
 | `auxiliar.trap@demo.local`, `encarregado.trap@demo.local`, `gestor.trap131@demo.local` | Trapiche · RH – Registro, RH – Aprovador, Gestor da TRAP131 | As medidas e os funcionários fictícios da Trapiche (TRAP131/TRAP132) |
-| `admin@demo.local` | USGA · Administrador | Pede a troca de senha no primeiro acesso; o **Painel** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. Não registra nem aprova medidas |
+| `admin@demo.local` | USGA · Administrador | Ninguém conhece a senha: no primeiro uso, abra no Mailpit o e-mail **"Acesso de administrador no SIGH"** e defina a senha pelo link. Depois, **Auditoria de acesso** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. **Nenhuma** tela de funcionários, medidas, painel ou relatórios |
+
+Os administradores (`admin@`, `admin.usga@`, `admin.grupo@`, `admin.trap@`) só gerenciam **acessos**: não veem
+funcionários, medidas, anexos, painel, relatórios, exportações, avisos nem a auditoria de medidas (a API responde 403).
+Continuam importando funcionários e histórico.
 
 Os dados de demonstração da **USGA** têm 40 funcionários fictícios, o **histórico disciplinar fictício** importado da
 planilha de penalidades (14 registros, com o selo "Histórico importado") e 8 medidas do SIGH em todos os estados
@@ -207,22 +211,23 @@ Segredos **não** ficam nos `appsettings*.json`. Sem configuração válida a AP
 | `ConnectionStrings:DefaultConnection` | sim | — |
 | `JwtOptions:SecretKey` | sim | pelo menos 32 bytes (UTF-8) |
 | `JwtOptions:Issuer` / `JwtOptions:Audience` | sim | já definidos no `appsettings.json` |
-| `Seed:AdminEmail` / `Seed:AdminPassword` | para criar o admin inicial | o admin nasce com troca de senha obrigatória |
+| `Seed:CompanyAdmins:N:CompanyCode` / `Email` / `Name` | para criar o primeiro administrador de cada empresa | sem senha: recebe o link de definição por e-mail (veja "Primeiro administrador de cada empresa") |
+| `Auth:AllowedEmailDomains:N` | não | domínios aceitos em contas novas; padrão `usga.com.br` |
 
 Em desenvolvimento, use user-secrets:
 ```bash
 cd SIGH/backend/src/SIGH.Api
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost,1433;Database=SIGH_DB;User Id=sa;Password=<senha do .env>;TrustServerCertificate=True;"
 dotnet user-secrets set "JwtOptions:SecretKey" "$(openssl rand -base64 48)"
-dotnet user-secrets set "Seed:AdminPassword" "<senha inicial do admin>"
-dotnet run
+dotnet user-secrets set "Seed:AdminEmail" "<seu e-mail>@usga.com.br"   # primeiro administrador da USGA
+dotnet run   # o link de definição de senha chega ao Mailpit (http://localhost:8025)
 ```
 Em CI/produção, use variáveis de ambiente (`ConnectionStrings__DefaultConnection`, `JwtOptions__SecretKey`, …; veja `.env.example`).
 
 O Swagger estará acessível em: `http://localhost:5000/swagger` ou `https://localhost:5001/swagger`.
 
-#### Troca de senha no primeiro acesso
-Usuários com troca de senha pendente recebem um access token com a claim `pwd_change_required: "true"`.
+#### Troca de senha obrigatória
+Contas com troca de senha pendente (hoje, só as de bancos antigos, criadas com senha pelo seed de antes) recebem um access token com a claim `pwd_change_required: "true"`.
 Com ele, qualquer endpoint autenticado responde **403** (ProblemDetails com `"code": "PASSWORD_CHANGE_REQUIRED"`),
 exceto `POST /api/v1/auth/change-password`, `POST /api/v1/auth/logout`, `POST /api/v1/auth/refresh` e `GET /api/v1/auth/me`.
 
@@ -274,14 +279,65 @@ Em desenvolvimento a API usa o Mailpit. Para ver os e-mails:
   Codespace, defina a URL pública da porta 3000:
   `dotnet user-secrets --project SIGH/backend/src/SIGH.Api set "App:PublicBaseUrl" "https://<codespace>-3000.app.github.dev"`.
 
-#### Senha inicial e "esqueci a senha"
-- Ao criar um usuário (`POST /api/v1/users`), a senha inicial é **opcional e desaconselhada**: a pessoa recebe por e-mail
-  um link de uso único (válido por `Auth:AccountSetupTokenHours`, 72 h) para **definir a própria senha**. O e-mail nunca
-  contém senha. Se o administrador informar uma senha inicial, ela precisa ser passada por outro canal e a troca continua
-  obrigatória no primeiro login.
+#### O administrador nunca conhece a senha
+- **Criação de usuário sem senha** (`POST /api/v1/users`): não há campo de senha (um `initialPassword` enviado por um
+  cliente antigo é ignorado). A conta nasce com uma senha aleatória que ninguém conhece e a pessoa recebe por e-mail um
+  link de **uso único**, válido por **48 h** (`Auth:AccountSetupTokenHours`), para definir a própria senha. O token é
+  guardado **só como hash** (SHA-256); o e-mail nunca contém senha.
+- **Reenvio**: na tela do usuário, **Reenviar link de definição de senha** (`POST /api/v1/users/{id}/setup-link`,
+  permissão `Users.Create`), só para quem ainda não definiu a senha. O link anterior deixa de valer. Quem já definiu a
+  senha usa "Esqueci minha senha". Registrado na auditoria (`Security.AccountSetupLinkSent`).
+- **Domínios**: contas novas só com e-mail `@usga.com.br` (`Auth:AllowedEmailDomains:0`, `:1`...; subdomínio não vale).
+  A demonstração (`compose.app.yml`) aceita também os domínios fictícios dos testes (`demo.local`, `e2e.local`,
+  `sigh.local`, `sigh.com.br`); os testes de integração, `sigh.com`, `sigh.test` e `demo.local`. Vincular à empresa uma
+  conta que já existe não depende do domínio.
 - `POST /api/v1/auth/forgot-password` sempre responde a mesma mensagem (sem revelar se o e-mail existe), com rate limit
   próprio. O link (`/reset-password?token=...`) é de uso único, guardado como hash e vale `Auth:PasswordResetTokenMinutes`
   (30 min). Depois do reset, todas as sessões e refresh tokens do usuário são revogados.
+
+#### Primeiro administrador de cada empresa
+Na publicação, `Seed:CompanyAdmins` (lista de `{ CompanyCode, Email, Name }`) é lida no startup, junto com o seed (`Database:ApplyMigrationsOnStartup`). Para cada empresa que
+**não tiver nenhum Administrador vigente** (perfil vigente agora e conta ativa, aguardando o primeiro acesso ou
+bloqueada), o SIGH cria a conta, se o e-mail ainda não existir, **só com o perfil Administrador naquela empresa** e envia
+o link de definição de senha (e-mail "Acesso de administrador no SIGH - <empresa>"). Se a conta já existe (a mesma
+pessoa em outra empresa), ela só recebe o perfil. Empresa que já tem administrador não muda. Cada concessão é registrada
+na auditoria (`Security.CompanyAdminProvisioned`, origem "publicação"). E-mail fora dos domínios aceitos é recusado
+(registrado no log; o startup não cai).
+
+```json
+"Seed": {
+  "CompanyAdmins": [
+    { "CompanyCode": "USGA", "Email": "ti.sigh@usga.com.br", "Name": "Administrador do Sistema" },
+    { "CompanyCode": "TRAP", "Email": "ti.sigh@usga.com.br" }
+  ]
+}
+```
+
+As chaves antigas continuam valendo e usam o mesmo mecanismo: `Seed:AdminEmail` vira a entrada da USGA e
+`Seed:Companies:<código>:AdminEmail` a da empresa. `Seed:AdminPassword` e `Seed:Companies:<código>:AdminPassword` são
+ignoradas (aviso no log). Bancos existentes não mudam: a empresa já tem administrador. Testes: `AdministratorAccountsTests`.
+
+#### Recuperação de administrador
+Se uma empresa ficar sem administrador (ou ele perder o acesso), o TI concede o perfil **pela linha de comando no
+servidor**, com a mesma configuração da API (connection string etc.):
+
+```bash
+dotnet SIGH.Api.dll admin-recover --company TRAP --email pessoa@usga.com.br [--name "Nome completo"]
+# na stack em containers:
+docker compose -p sigh-local -f compose.app.yml exec api dotnet SIGH.Api.dll admin-recover --company TRAP --email pessoa@usga.com.br
+```
+
+- Concede o perfil Administrador naquela empresa (mesmo que ela já tenha outro), cria a conta se o e-mail não existir,
+  reativa a conta se estiver inativa e envia o link de definição de senha (48 h, uso único). O e-mail sai pela outbox,
+  enviada pela API em execução.
+- **Só existe na linha de comando**: não há endpoint (o teste `AdminRecover_HasNoHttpEndpoint` confere).
+- Registrado na auditoria (`Security.AdministratorRecovered`, origem **"linha de comando"**, sem usuário).
+- Saída: 0 (feito), 1 (uso incorreto), 2 (recusado: empresa inexistente ou e-mail fora dos domínios aceitos).
+
+#### Alerta de administrador
+Na tela **Usuários**, um alerta aparece quando a empresa ativa tem **um só Administrador vigente**, ou quando o acesso
+do último termina em **menos de 15 dias** (`GET /api/v1/users/admin-status`). Continua valendo: ninguém altera os
+próprios perfis, e o último Administrador ativo não pode ser retirado nem desativado.
 
 #### Várias abas
 O refresh é serializado entre abas (Web Locks + BroadcastChannel no front) e o backend tolera, por
@@ -300,14 +356,13 @@ lotes de importação, avisos, auditoria e administradores. O e-mail (todos @usg
 | --- | --- | --- |
 | `Seed:Companies:<código>:Name` | `Trapiche` | nome de exibição; só vale na criação (depois é editável no banco) |
 | `Seed:Companies:<código>:ManagementUnitPrefix` | `TRAP` | prefixo das Chaves Organização da empresa (`TRAP131`) |
-| `Seed:Companies:<código>:AdminEmail` | `admin.trap@usga.com.br` | primeiro administrador da empresa |
-| `Seed:Companies:<código>:AdminPassword` | — | **só** por user-secrets ou variável de ambiente (`Seed__Companies__TRAP__AdminPassword`) |
+| `Seed:CompanyAdmins:N:CompanyCode` / `Email` / `Name` | `TRAP` / `admin.trap@usga.com.br` | primeiro administrador da empresa, sem senha (veja "Primeiro administrador de cada empresa") |
 
 - O seed cria só o que falta: a USGA usa o Id da antiga empresa padrão (`00000000-…-0001`); a Trapiche, o Id
   `00000000-…-0002`. Nenhum nome jurídico é inventado: a Trapiche nasce como "Trapiche", com o nome editável.
-- **Primeiro administrador**: criado com troca de senha obrigatória no primeiro acesso, como o da USGA
-  (`Seed:AdminEmail`/`Seed:AdminPassword` continuam valendo para a USGA). Se o e-mail já existe (a mesma pessoa
-  administra as duas), ela só recebe o perfil Administrador na empresa nova. Empresa que já tem administrador não muda.
+- **Primeiro administrador**: por `Seed:CompanyAdmins`, com o link de definição de senha por e-mail (ninguém conhece a
+  senha). Se o e-mail já existe (a mesma pessoa administra as duas), ela só recebe o perfil Administrador na empresa
+  nova. Empresa que já tem administrador não muda.
 - **Gerências**: as da USGA vêm de `Seed:ManagementUnits` (sem mudança). A Trapiche começa **sem** gerências: a primeira
   importação de funcionários cria as dela, com o código como nome (os códigos reais ainda serão levantados).
 - **Migration `MultiCompany`**: tudo o que existia (perfis, usuários, motivos, lotes, estado do histórico, auditoria)
@@ -352,8 +407,9 @@ lotes de importação, avisos, auditoria e administradores. O e-mail (todos @usg
 - **Funcionários**: matrícula única por empresa e regra de CPF dentro de cada empresa — a mesma pessoa pode existir nas
   duas, com cadastros e históricos separados.
 - **Avisos e e-mails** vão só para quem tem o perfil na empresa da medida, e o e-mail cita o nome da empresa (nunca o
-  nome nem o CPF do funcionário). **Auditoria**: cada registro grava a empresa; o administrador e o jurídico veem só as
-  empresas em que têm `Audit.View`; eventos sem empresa (login) só para quem tem escopo total em todas.
+  nome nem o CPF do funcionário). **Auditoria**: cada registro grava a empresa; o jurídico vê só as empresas em que tem
+  `Audit.View` (eventos sem empresa, como login, só com escopo total em todas); o administrador vê só a **auditoria de
+  acesso** (`Audit.ViewAccess`) das empresas dele.
 
 **Desenho técnico**: as permissões **não** vão mais no token. A cada requisição o `CompanyContext` lê do banco os
 perfis vigentes do usuário por empresa (uma consulta, memorizada na requisição), valida o `X-SIGH-Company` e o
@@ -429,18 +485,27 @@ o acusado, ocorrências, investigação, decisão submetida; na aprovação: apr
 |---|:-:|:-:|:-:|:-:|:-:|
 | Users.View / Create / ChangeStatus / Unlock / ManageRoles | ✔ | | | | |
 | ManagementUnits.Manage | ✔ | | | | |
-| Disciplinary.InfractionTypes.* | ✔ | | | | |
-| Employees.View | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Disciplinary.InfractionTypes.* (motivos) | ✔ | | | | |
+| Audit.ViewAccess (auditoria de acesso) | ✔ | | | | |
 | Employees.Import | ✔ | | | | |
-| Disciplinary.Records.View | ✔ | ✔ | ✔ | ✔ | ✔ (só as gerências dele) |
-| Disciplinary.Records.ViewAll (escopo total) | ✔ | ✔ | ✔ | ✔ | |
+| Disciplinary.History.Import | ✔ | | | | |
+| Employees.View | | ✔ | ✔ | ✔ | ✔ |
+| Disciplinary.Records.View | | ✔ | ✔ | ✔ | ✔ (só as gerências dele) |
+| Disciplinary.Records.ViewAll (escopo total) | | ✔ | ✔ | ✔ | |
 | Disciplinary.Records.Register | | ✔ | | | |
 | Disciplinary.Records.Approve | | | ✔ | | |
 | Disciplinary.Cases.AddEvidence | | ✔ | ✔ | | |
 | Disciplinary.Cases.RemoveEvidence | | | ✔ | | |
-| Disciplinary.Reports.* (5) | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Notifications.View / Read | ✔ | ✔ | ✔ | | |
-| Audit.View | ✔ | | | ✔ | |
+| Disciplinary.Reports.* (4: painel, relatório, histórico, exportação) | | ✔ | ✔ | ✔ | ✔ |
+| Notifications.View / Read | | ✔ | ✔ | | |
+| Audit.View (trilha completa) | | | | ✔ | |
+
+Os perfis valem por empresa (a mesma matriz na USGA e na Trapiche). O **Administrador só gerencia acessos**: usuários,
+perfis e gerências de usuários, gerências, motivos e a auditoria de acesso, e continua importando funcionários e
+histórico (decisão do cliente). Ele não lê funcionários, medidas, anexos, relatórios, painel, exportações, avisos nem a
+auditoria de medidas: toda rota que exige outra permissão responde **403** (`AdministratorWithoutDataTests`, uma linha
+por rota, lida dos controllers). O seed retira as permissões que sobram em bancos existentes. Os outros quatro perfis
+não mudaram (teste de unidade com a lista de antes).
 
 As permissões de cada perfil ficam em `SystemRoles` e o seed as sincroniza a cada inicialização (o que sobra é
 retirado logicamente); não há tela para editá-las. Perfis e gerências de um usuário têm validade opcional
@@ -471,6 +536,12 @@ segurança (login, falha, bloqueio, troca/redefinição de senha, logout, reuso 
 download de evidência) são gravados explicitamente. Senhas, hashes de token, segredos, caminho do storage, CPF e conteúdo
 de arquivo nunca são gravados (`AuditPolicy`). A trilha só recebe inserções. Consulta: `GET /api/v1/audit-logs`
 (permissão `Audit.View`) e `GET /api/v1/disciplinary-cases/{id}/audit-trail`.
+**Auditoria de acesso** (`Audit.ViewAccess`, do Administrador): `GET /api/v1/audit-logs/access` e
+`GET /api/v1/audit-logs/access/users`. Só contas, perfis, gerências de usuários, gerências, motivos e eventos de
+segurança (login, senha, bloqueio, link de definição de senha, primeiro administrador, recuperação pelo TI), das empresas
+em que ele tem a permissão; eventos sem empresa (login) entram se forem de uma pessoa ligada a essas empresas. Nada de
+funcionário, medida, anexo (nem o download) ou importação, e sem a busca por medida ou matrícula. Na tela, "Auditoria de
+acesso".
 Na tela, a busca é por número da medida (`reference=MED-…`, traz a medida e as subentidades) ou matrícula
 (`reference=50090006`), e o usuário é escolhido pelo nome (`GET /api/v1/audit-logs/users?search=`). Campos e valores
 aparecem em português (datas em dd/MM/aaaa HH:mm de Maceió, Sim/Não, "(oculto)" para `[redacted]`, "—" para vazio);

@@ -18,7 +18,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { ScrollText, Trash2 } from 'lucide-react';
+import { MailPlus, ScrollText, Trash2 } from 'lucide-react';
 import { DetailNav } from '../../../components/ui/PageHeader';
 import { DetailHeader, DetailTabs, TabPanel } from '../../../components/ui/DetailHeader';
 import { Field, SectionCard } from '../../../components/ui/SectionCard';
@@ -26,7 +26,8 @@ import { EmptyState, ErrorState } from '../../../components/ui/States';
 import { UserStatusChip } from '../../../components/ui/StatusChip';
 import { PaginationBar } from '../../../components/ui/DataTable';
 import { AuditEntryCard } from '../../audit/components/AuditEntryCard';
-import { auditApi, auditKeys } from '../../audit/api/auditApi';
+import { auditApi, auditKeys, type AuditMode } from '../../audit/api/auditApi';
+import { useAuditMode } from '../../audit/pages/AuditPage';
 import { label } from '../../../i18n/labels';
 import { formatBoolean, formatDateTime, formatNumber } from '../../../utils/formatters';
 import { useAuth } from '../../../hooks/useAuth';
@@ -90,11 +91,14 @@ const AssignRow: React.FC<{
   );
 };
 
-/** Atividades do usuário: registros da auditoria feitos por ele (exige Audit.View). */
-const UserActivities: React.FC<{ userId: string }> = ({ userId }) => {
+/**
+ * Atividades do usuário: registros da auditoria feitos por ele. Com Audit.View, a trilha completa; com só
+ * Audit.ViewAccess (Administrador), só os eventos de acesso e segurança.
+ */
+const UserActivities: React.FC<{ userId: string; mode: AuditMode }> = ({ userId, mode }) => {
   const [page, setPage] = useState(1);
   const filters = { userId, pageNumber: page, pageSize: 20 };
-  const trail = useQuery({ queryKey: auditKeys.search(filters), queryFn: () => auditApi.search(filters) });
+  const trail = useQuery({ queryKey: auditKeys.search(filters, mode), queryFn: () => auditApi.search(filters, mode) });
   if (trail.isLoading) return <div className="h-40 animate-pulse rounded-lg bg-surface-2" aria-busy="true" aria-label="Carregando atividades" />;
   if (trail.isError) return <ErrorState message={(trail.error as Error).message} onRetry={() => trail.refetch()} />;
   const data = trail.data!;
@@ -139,13 +143,16 @@ export const UserDetailPage: React.FC = () => {
   const roles = useQuery({ queryKey: adminKeys.roles, queryFn: adminApi.roles });
   const units = useQuery({ queryKey: adminKeys.units, queryFn: adminApi.units });
 
+  const auditMode = useAuditMode();
   const self = me?.id === id;
   const canManage = hasPermission(PERMISSIONS.USERS_MANAGE_ROLES) && !self;
   const canChangeStatus = hasPermission(PERMISSIONS.USERS_CHANGE_STATUS) && !self;
+  const canResend = hasPermission(PERMISSIONS.USERS_CREATE) && !self;
 
   const onAccess = (next: UserAccess, text: string) => {
     queryClient.setQueryData(adminKeys.access(id), next);
     void queryClient.invalidateQueries({ queryKey: adminKeys.user(id) });
+    void queryClient.invalidateQueries({ queryKey: adminKeys.adminStatus });
     setError(null);
     setMessage(text);
   };
@@ -178,6 +185,15 @@ export const UserDetailPage: React.FC = () => {
     onError,
   });
 
+  const resend = useMutation({
+    mutationFn: () => adminApi.resendSetupLink(id),
+    onSuccess: (r) => {
+      setError(null);
+      setMessage(`Link de definição de senha reenviado para ${r.email}. Ele vale por ${r.validHours} horas e o anterior deixou de valer.`);
+    },
+    onError,
+  });
+
   if (user.isLoading || access.isLoading) {
     return (
       <div className="flex flex-col gap-4" aria-busy="true" aria-label="Carregando usuário">
@@ -201,7 +217,7 @@ export const UserDetailPage: React.FC = () => {
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'informacoes', label: 'Informações' },
     { key: 'perfis', label: 'Perfis e gerências' },
-    ...(hasPermission(PERMISSIONS.AUDIT_VIEW) ? [{ key: 'atividades' as const, label: 'Atividades' }] : []),
+    ...(auditMode ? [{ key: 'atividades' as const, label: 'Atividades' }] : []),
   ];
 
   return (
@@ -216,9 +232,14 @@ export const UserDetailPage: React.FC = () => {
           </>
         }
         actions={
-          canChangeStatus && (
+          (canChangeStatus || canResend) && (
             <>
-              {u.status === 'Inactive' || u.status === 'Suspended' ? (
+              {canResend && u.status === 'PendingFirstAccess' && (
+                <Button variant="outlined" startIcon={<MailPlus size={16} />} disabled={resend.isPending} onClick={() => resend.mutate()} data-testid="resend-setup-link">
+                  Reenviar link de definição de senha
+                </Button>
+              )}
+              {canChangeStatus && (u.status === 'Inactive' || u.status === 'Suspended' ? (
                 <Button variant="outlined" onClick={() => status.mutate('activate')}>
                   Ativar
                 </Button>
@@ -226,8 +247,8 @@ export const UserDetailPage: React.FC = () => {
                 <Button variant="outlined" color="error" onClick={() => status.mutate('deactivate')}>
                   Desativar
                 </Button>
-              )}
-              {u.status === 'Locked' && hasPermission(PERMISSIONS.USERS_UNLOCK) && (
+              ))}
+              {canChangeStatus && u.status === 'Locked' && hasPermission(PERMISSIONS.USERS_UNLOCK) && (
                 <Button variant="outlined" onClick={() => status.mutate('unlock')}>
                   Desbloquear
                 </Button>
@@ -369,9 +390,9 @@ export const UserDetailPage: React.FC = () => {
       </Paper>
       </TabPanel>
 
-      {hasPermission(PERMISSIONS.AUDIT_VIEW) && (
+      {auditMode && (
         <TabPanel active={tab === 'atividades'} idPrefix="usuario" tabKey="atividades">
-          <UserActivities userId={id} />
+          <UserActivities userId={id} mode={auditMode} />
         </TabPanel>
       )}
     </div>
