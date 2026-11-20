@@ -523,15 +523,20 @@ na stack de demonstração (`sigh-local`) nem no `.env.local`.
 **Telas com os dados de demonstração** (`SIGH/frontend/e2e-demo`): `scripts/e2e-stack.sh --demo` (stack em contêineres,
 sem user-secrets; `compose.e2e-demo.yml` liga o seed de demonstração) ou `npx playwright test -c playwright.demo.config.ts`
 (API com `dotnet run`). Os dois usam um banco descartável `SIGH_E2E_<data>`. Roda:
-- `no-english.spec`: percorre todas as páginas do menu, os detalhes e as abas com cada perfil (administrador e os 6
-  usuários de demonstração) e falha se achar um termo em inglês (os nomes de todos os enums e palavras como Pending,
+- `no-english.spec`: percorre todas as páginas do menu, os detalhes e as abas com cada perfil (administrador e os
+  usuários de demonstração das duas empresas) e falha se achar um termo em inglês (os nomes de todos os enums e palavras como Pending,
   Loading, Save, Not found… e os textos padrão do MUI: Close, Rows per page, of, Open, Clear, Previous, Next, Go to page;
   palavra inteira, sem diferenciar maiúsculas). Confere o texto visível **e** os atributos acessíveis (`aria-label`,
   `title`, `alt`, `placeholder`), inclusive no alerta "Usuário criado", nos diálogos, na paginação e no Autocomplete.
-  Os textos padrão dos componentes vêm da localização `ptBR` do MUI, aplicada no tema (`src/styles/theme.ts`);
+  Os textos padrão dos componentes vêm da localização `ptBR` do MUI, aplicada no tema (`src/styles/theme.ts`).
+  Roda nos temas escuro e claro (`E2E_THEME=dark` ou `E2E_THEME=light` restringe a um só);
 - `accessibility.spec`: axe-core (WCAG 2.1 AA) nas telas principais, nos temas escuro e claro;
 - `screenshots.spec`: com `SIGH_SCREENSHOTS=1`, grava as capturas em `SIGH/docs/telas/`
   (`SIGH_SCREENSHOTS=1 scripts/e2e-stack.sh --demo e2e-demo/screenshots.spec.ts`, sozinho).
+
+No CI, o workflow `SIGH E2E Demo` (`.github/workflows/e2e-demo.yml`, check "E2E Demo (acessibilidade e nenhum termo em
+inglês)") roda o `setup`, o `accessibility.spec` e o `no-english.spec` a cada PR para a `main`, no mesmo modelo do
+`SIGH E2E`. As capturas não rodam no CI.
 
 **Tema**: os tokens (cores, tipografia, raios, sombras) estão em `src/styles/tokens.ts` e viram variáveis CSS
 (`--sigh-*`) usadas pelo tema do MUI e pelo Tailwind (`src/index.css`). Escuro é o padrão; o claro fica salvo no

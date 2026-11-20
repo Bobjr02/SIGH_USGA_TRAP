@@ -8,6 +8,7 @@ import { server } from '../../../test/server';
 import { makeUser, meReturns, refreshSucceeds, renderApp } from '../../../test/auth';
 import { PERMISSIONS } from '../../../auth/permissions';
 import { CaseAuditTimeline } from '../components/CaseAuditTimeline';
+import { describeChanges } from '../components/auditFormat';
 import type { AuditLogDto } from '../api/auditApi';
 
 const page = (items: AuditLogDto[]) => ({ success: true, data: { items, pageNumber: 1, pageSize: 25, totalCount: items.length, totalPages: 1 } });
@@ -41,6 +42,24 @@ const downloaded: AuditLogDto = {
   userName: 'João Auditor',
   newValues: '{"fileName":"laudo.pdf"}',
 };
+
+describe('describeChanges', () => {
+  // Bug achado pelo e2e-demo (no-english, rodada no tema claro depois de o admin criar um usuário): o evento
+  // "perfis ou permissões alterados" grava changes: [{ entity, action }] e a tela mostrava "UserRole" e "Created".
+  it('translates the entity and the action nested in the details of a roles-changed security event', () => {
+    const lines = describeChanges({
+      id: 'a4',
+      createdAt: '2026-11-18T15:34:13Z',
+      action: 'Security.RolesOrPermissionsChanged',
+      entity: 'AccessControl',
+      newValues: '{"changes":[{"entity":"UserRole","id":"6916c5fc-e1d6-4298-8b67-6b8dbb3ad461","action":"Created"}]}',
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0].field).toBe('Alterações');
+    expect(lines[0].after).toBe('Registro: Perfil do usuário; Identificador: 6916c5fc-e1d6-4298-8b67-6b8dbb3ad461; Ação: Criação');
+    expect(lines[0].after).not.toMatch(/UserRole|Created/);
+  });
+});
 
 describe('CaseAuditTimeline', () => {
   it('shows the case history with actions, authors and changed fields', async () => {
