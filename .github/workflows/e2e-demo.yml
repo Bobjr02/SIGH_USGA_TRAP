@@ -3,7 +3,9 @@ name: SIGH E2E Demo
 # Telas com DADOS DE DEMONSTRAÇÃO (SIGH/frontend/e2e-demo, Playwright + Chromium): acessibilidade (axe-core, temas
 # escuro e claro) e nenhum termo em inglês (temas escuro e claro), contra a stack EM CONTAINERS com o seed de
 # demonstração (compose.app.yml + compose.e2e.yml + compose.e2e-demo.yml), com segredos gerados no próprio job
-# (scripts/e2e-stack.sh --demo). Mesmo modelo do workflow e2e.yml; as capturas (screenshots.spec) não rodam aqui.
+# (scripts/e2e-stack.sh --demo). Mesmo modelo do workflow e2e.yml. As capturas (screenshots.spec) só rodam quando
+# pedidas à mão (Actions → SIGH E2E Demo → Run workflow, "screenshots" marcado): saem como o artefato "capturas-telas",
+# para serem conferidas e versionadas em SIGH/docs/telas.
 on:
   # Na main, só quando muda algo que a suíte exercita (o PR já rodou antes do merge).
   push:
@@ -19,6 +21,11 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: 'Gerar também as capturas de SIGH/docs/telas (artefato "capturas-telas")'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -57,6 +64,22 @@ jobs:
       # "nenhum termo em inglês" nos dois temas, e desmonta tudo, passando ou falhando.
       - name: Run E2E Demo against the compose stack
         run: scripts/e2e-stack.sh --demo e2e-demo/setup.spec.ts e2e-demo/accessibility.spec.ts e2e-demo/no-english.spec.ts
+
+      # Só no disparo manual com "screenshots": a mesma stack de demonstração, só o screenshots.spec (ele não pode rodar
+      # junto do no-english, que cria um usuário fictício que apareceria nas capturas).
+      - name: Generate screenshots (SIGH/docs/telas)
+        if: github.event_name == 'workflow_dispatch' && inputs.screenshots
+        env:
+          SIGH_SCREENSHOTS: '1'
+        run: scripts/e2e-stack.sh --demo e2e-demo/screenshots.spec.ts
+
+      - name: Upload screenshots
+        if: github.event_name == 'workflow_dispatch' && inputs.screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-telas
+          path: SIGH/docs/telas/*.png
+          retention-days: 14
 
       - name: Upload Playwright report and traces
         if: failure()

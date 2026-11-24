@@ -123,7 +123,7 @@ const CreateUserDialog: React.FC<{ open: boolean; onClose: () => void }> = ({ op
           <>
             <Typography variant="subtitle2">Gerências do gestor (pelo menos uma)</Typography>
             <FormGroup row>
-              {units.data?.map((u) => (
+              {units.data?.filter((u) => u.isActive).map((u) => (
                 <FormControlLabel
                   key={u.id}
                   control={<Checkbox checked={unitIds.includes(u.id)} onChange={() => setUnitIds((ids) => toggle(ids, u.id))} />}

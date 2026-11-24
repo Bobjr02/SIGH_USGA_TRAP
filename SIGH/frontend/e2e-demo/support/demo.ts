@@ -23,7 +23,7 @@ export const PROFILES: DemoProfile[] = [
     'auxiliar', 'encarregado', 'juridico', 'gestor.industrial', 'gestor.agricola', 'preposto',
     // Por empresa (multiempresa): USGA e Trapiche.
     'admin.usga', 'auxiliar.usga', 'encarregado.usga', 'gestor.usga131', 'admin.grupo',
-    'admin.trap', 'auxiliar.trap', 'encarregado.trap', 'gestor.trap131',
+    'admin.trap', 'auxiliar.trap', 'encarregado.trap', 'gestor.trap220',
   ].map((login) => ({
     login,
     email: `${login}@demo.local`,

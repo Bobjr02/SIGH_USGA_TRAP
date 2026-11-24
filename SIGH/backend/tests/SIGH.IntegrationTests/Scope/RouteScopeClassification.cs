@@ -51,7 +51,7 @@ public static class RouteScopeClassification
         ["/api/v1/users/{id:guid}"] = "cadastro de usuários do sistema; exige Users.View",
         ["/api/v1/users/{id:guid}/access"] = "perfis e gerências de um usuário; exige Users.View",
         ["/api/v1/roles"] = "catálogo de perfis",
-        ["/api/v1/management-units"] = "catálogo das 9 gerências (sem funcionários); exige Users.View",
+        ["/api/v1/management-units"] = "catálogo das gerências da lista oficial (sem funcionários); exige Users.View",
         ["/api/v1/infraction-types"] = "catálogo de motivos",
         ["/api/v1/infraction-types/{id:guid}"] = "catálogo de motivos",
         ["/api/v1/employees/import/batches"] = "lotes de importação: só contagens agregadas, sem dado de funcionário; exige Employees.Import",

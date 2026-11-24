@@ -20,7 +20,7 @@ using SIGH.Persistence.Seeds;
 namespace SIGH.IntegrationTests.Scope;
 
 /// <summary>
-/// Cenário de isolamento entre empresas: dados da Trapiche (funcionários TRAP131/TRAP132 importados, medida pendente,
+/// Cenário de isolamento entre empresas: dados da Trapiche (funcionários TRAP220/TRAP230 importados, medida pendente,
 /// medida aprovada com anexo, motivo próprio, lotes de importação, aviso, usuário e vínculos) e dois usuários com TODAS
 /// as permissões, cada um em UMA empresa: <see cref="UsgaUser"/> (só USGA) e <see cref="TrapUser"/> (só Trapiche,
 /// o controle positivo). Montado uma vez por fixture (as sondas não alteram dados quando o isolamento funciona).
@@ -92,7 +92,7 @@ public sealed class CompanyScenario
 
         using var trapAdmin = await AccessTestHelpers.LoginAsync(factory, TrapUser, CompanyDefaults.TrapicheCode);
 
-        // 1. Funcionários da Trapiche: a primeira importação cria as gerências TRAP131 e TRAP132.
+        // 1. Funcionários da Trapiche (as gerências TRAP220, TRAP230 e as outras da lista oficial vêm do seed).
         var employeesFile = TrapicheDemoSpreadsheets.EmployeesXlsx();
         var preview = await PostFileAsync(trapAdmin, "/api/v1/employees/import/preview", employeesFile);
         preview.StatusCode.Should().Be(HttpStatusCode.OK, await preview.Content.ReadAsStringAsync());
@@ -106,8 +106,8 @@ public sealed class CompanyScenario
         infractionResponse.StatusCode.Should().Be(HttpStatusCode.Created, await infractionResponse.Content.ReadAsStringAsync());
         var infractionId = JsonDocument.Parse(await infractionResponse.Content.ReadAsStringAsync()).RootElement.GetProperty("data").GetProperty("id").GetGuid();
 
-        // 3. Gestor da TRAP131 (usuário da Trapiche, com perfil e gerência para as sondas de administração).
-        var manager = await AccessTestHelpers.CreateUserAsync(factory, TrapManager, [new RoleGrant(SystemRoles.Manager, CompanyId: trap)], "TRAP131");
+        // 3. Gestor da TRAP220 (usuário da Trapiche, com perfil e gerência para as sondas de administração).
+        var manager = await AccessTestHelpers.CreateUserAsync(factory, TrapManager, [new RoleGrant(SystemRoles.Manager, CompanyId: trap)], "TRAP220");
 
         Guid employeeId, employee2Id, unitId, jobId, roleLink, unitLink;
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -115,7 +115,7 @@ public sealed class CompanyScenario
             var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
             employeeId = await db.Employees.Where(e => e.CompanyId == trap && e.EmployeeNumber == "70090001").Select(e => e.Id).SingleAsync();
             employee2Id = await db.Employees.Where(e => e.CompanyId == trap && e.EmployeeNumber == "70090002").Select(e => e.Id).SingleAsync();
-            unitId = await db.ManagementUnits.Where(m => m.CompanyId == trap && m.Code == "TRAP131").Select(m => m.Id).SingleAsync();
+            unitId = await db.ManagementUnits.Where(m => m.CompanyId == trap && m.Code == "TRAP220").Select(m => m.Id).SingleAsync();
             jobId = await db.JobTitles.Where(j => j.CompanyId == trap).Select(j => j.Id).FirstAsync();
             roleLink = await db.UserRoles.Where(ur => ur.UserId == manager.Id).Select(ur => ur.Id).SingleAsync();
             unitLink = await db.UserManagementUnits.Where(x => x.UserId == manager.Id).Select(x => x.Id).SingleAsync();

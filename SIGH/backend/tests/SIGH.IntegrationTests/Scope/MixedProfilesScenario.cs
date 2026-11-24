@@ -22,13 +22,13 @@ namespace SIGH.IntegrationTests.Scope;
 /// Perfis DIFERENTES em cada empresa, conferidos no modo "Todas". Dados fictícios nas duas empresas:
 /// - USGA: carga inicial de referência (gerências USGA131 e USGA132), motivo FALTA, medidas da USGA131 (pendente) e
 ///   da USGA132 (aprovada, com anexo), lote de funcionários e lote do histórico (pré-visualização);
-/// - Trapiche: planilhas de demonstração (TRAP131 e TRAP132), motivo TRAPMOTIVO, medidas da TRAP131 (pendente) e da
-///   TRAP132 (aprovada, com anexo), lote de funcionários e lote do histórico (pré-visualização);
+/// - Trapiche: planilhas de demonstração (TRAP220 e TRAP230), motivo TRAPMOTIVO, medidas da TRAP220 (pendente) e da
+///   TRAP230 (aprovada, com anexo), lote de funcionários e lote do histórico (pré-visualização);
 /// - para cada usuário misto, cinco avisos: dois da USGA (um geral e um da medida da USGA132) e três da Trapiche
-///   (um geral, um da medida da TRAP131 e um da TRAP132).
+///   (um geral, um da medida da TRAP220 e um da TRAP230).
 ///
 /// Usuários mistos (o que cada um deve ver é conferido em <see cref="MixedProfilesTests"/>):
-/// - <see cref="RegistrarUsgaManagerTrap"/>: RH – Registro na USGA e só Gestor da TRAP131 na Trapiche;
+/// - <see cref="RegistrarUsgaManagerTrap"/>: RH – Registro na USGA e só Gestor da TRAP220 na Trapiche;
 /// - <see cref="ManagerUsgaRegistrarTrap"/>: o inverso (Gestor da USGA131 na USGA, RH – Registro na Trapiche);
 /// - <see cref="AdminUsgaManagerTrap"/> e <see cref="ManagerUsgaAdminTrap"/>: Administrador numa empresa e Gestor na
 ///   outra (complementares: exercitam lotes, usuários, gerências, motivos e auditoria, que nem o RH – Registro nem o
@@ -54,21 +54,21 @@ public sealed class MixedProfilesScenario
     public const string NoticeUsgaGeneral = "Aviso PM USGA geral";
     public const string NoticeUsga132 = "Aviso PM USGA132";
     public const string NoticeTrapGeneral = "Aviso PM TRAP geral";
-    public const string NoticeTrap131 = "Aviso PM TRAP131";
-    public const string NoticeTrap132 = "Aviso PM TRAP132";
+    public const string NoticeTrap220 = "Aviso PM TRAP220";
+    public const string NoticeTrap230 = "Aviso PM TRAP230";
 
     /// <summary>Funcionários (matrícula) de cada gerência.</summary>
     public const string EmployeeUsga131 = "50090006";
     public const string EmployeeUsga132 = "50090000";
-    public const string EmployeeTrap131 = "70090001";
-    public const string EmployeeTrap132 = "70090007";
+    public const string EmployeeTrap220 = "70090001";
+    public const string EmployeeTrap230 = "70090007";
 
     public sealed record RecordRef(Guid Id, string Number, Guid EmployeeId, Guid? EvidenceId);
 
     public RecordRef Usga131 { get; private init; } = null!;
     public RecordRef Usga132 { get; private init; } = null!;
-    public RecordRef Trap131 { get; private init; } = null!;
-    public RecordRef Trap132 { get; private init; } = null!;
+    public RecordRef Trap220 { get; private init; } = null!;
+    public RecordRef Trap230 { get; private init; } = null!;
     public Guid UsgaInfraction { get; private init; }
     public Guid TrapInfraction { get; private init; }
     public Guid UsgaEmployeeBatch { get; private init; }
@@ -81,8 +81,8 @@ public sealed class MixedProfilesScenario
     public Guid RegistrarUsgaManagerTrapId { get; private init; }
     public Guid UsgaUnit131 { get; private init; }
     public Guid UsgaUnit132 { get; private init; }
-    public Guid TrapUnit131 { get; private init; }
-    public Guid TrapUnit132 { get; private init; }
+    public Guid TrapUnit220 { get; private init; }
+    public Guid TrapUnit230 { get; private init; }
     public string UsgaName { get; private init; } = string.Empty;
     public string TrapName { get; private init; } = string.Empty;
 
@@ -147,11 +147,11 @@ public sealed class MixedProfilesScenario
 
         // ---- Usuários mistos (gerências: códigos únicos entre as empresas) ----
         var regUsgaGesTrap = await AccessTestHelpers.CreateUserAsync(factory, RegistrarUsgaManagerTrap,
-            [new RoleGrant(SystemRoles.HrRegistrar, CompanyId: usga), new RoleGrant(SystemRoles.Manager, CompanyId: trap)], "TRAP131");
+            [new RoleGrant(SystemRoles.HrRegistrar, CompanyId: usga), new RoleGrant(SystemRoles.Manager, CompanyId: trap)], "TRAP220");
         var gesUsgaRegTrap = await AccessTestHelpers.CreateUserAsync(factory, ManagerUsgaRegistrarTrap,
             [new RoleGrant(SystemRoles.Manager, CompanyId: usga), new RoleGrant(SystemRoles.HrRegistrar, CompanyId: trap)], "USGA131");
         var admUsgaGesTrap = await AccessTestHelpers.CreateUserAsync(factory, AdminUsgaManagerTrap,
-            [new RoleGrant(SystemRoles.Administrator, CompanyId: usga), new RoleGrant(SystemRoles.Manager, CompanyId: trap)], "TRAP131");
+            [new RoleGrant(SystemRoles.Administrator, CompanyId: usga), new RoleGrant(SystemRoles.Manager, CompanyId: trap)], "TRAP220");
         var gesUsgaAdmTrap = await AccessTestHelpers.CreateUserAsync(factory, ManagerUsgaAdminTrap,
             [new RoleGrant(SystemRoles.Manager, CompanyId: usga), new RoleGrant(SystemRoles.Administrator, CompanyId: trap)], "USGA131");
 
@@ -160,19 +160,19 @@ public sealed class MixedProfilesScenario
             db.Employees.Where(e => e.CompanyId == company && e.EmployeeNumber == number).Select(e => e.Id).Single();
         Guid Unit(SighDbContext db, string code) => db.ManagementUnits.Where(m => m.Code == code).Select(m => m.Id).Single();
 
-        Guid eU131, eU132, eT131, eT132, uU131, uU132, uT131, uT132;
+        Guid eU131, eU132, eT220, eT230, uU131, uU132, uT220, uT230;
         string usgaName, trapName;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
             eU131 = Employee(db, usga, EmployeeUsga131);
             eU132 = Employee(db, usga, EmployeeUsga132);
-            eT131 = Employee(db, trap, EmployeeTrap131);
-            eT132 = Employee(db, trap, EmployeeTrap132);
+            eT220 = Employee(db, trap, EmployeeTrap220);
+            eT230 = Employee(db, trap, EmployeeTrap230);
             uU131 = Unit(db, "USGA131");
             uU132 = Unit(db, "USGA132");
-            uT131 = Unit(db, "TRAP131");
-            uT132 = Unit(db, "TRAP132");
+            uT220 = Unit(db, "TRAP220");
+            uT230 = Unit(db, "TRAP230");
             usgaName = await db.Companies.Where(c => c.Id == usga).Select(c => c.Name).SingleAsync();
             trapName = await db.Companies.Where(c => c.Id == trap).Select(c => c.Name).SingleAsync();
         }
@@ -184,12 +184,12 @@ public sealed class MixedProfilesScenario
 
         var rU131 = await ReferenceData.RegisterAsync(usgaReg, ReferenceData.Warning(eU131, usgaInfraction, today.AddDays(-2)));
         var rU132 = await ReferenceData.RegisterAsync(usgaReg, ReferenceData.Warning(eU132, usgaInfraction, today.AddDays(-3)));
-        var rT131 = await ReferenceData.RegisterAsync(trapReg, ReferenceData.Warning(eT131, trapInfraction, today.AddDays(-2)));
-        var rT132 = await ReferenceData.RegisterAsync(trapReg, ReferenceData.Warning(eT132, trapInfraction, today.AddDays(-3)));
+        var rT220 = await ReferenceData.RegisterAsync(trapReg, ReferenceData.Warning(eT220, trapInfraction, today.AddDays(-2)));
+        var rT230 = await ReferenceData.RegisterAsync(trapReg, ReferenceData.Warning(eT230, trapInfraction, today.AddDays(-3)));
         var evU132 = await AttachAsync(usgaReg, rU132.Summary.Id);
-        var evT132 = await AttachAsync(trapReg, rT132.Summary.Id);
+        var evT230 = await AttachAsync(trapReg, rT230.Summary.Id);
         (await usgaApp.PostAsync($"/api/v1/disciplinary-records/{rU132.Summary.Id}/approve", null)).EnsureSuccessStatusCode();
-        (await trapApp.PostAsync($"/api/v1/disciplinary-records/{rT132.Summary.Id}/approve", null)).EnsureSuccessStatusCode();
+        (await trapApp.PostAsync($"/api/v1/disciplinary-records/{rT230.Summary.Id}/approve", null)).EnsureSuccessStatusCode();
 
         // ---- Avisos: os automáticos do fluxo ficam lidos; o contador mede só os cinco abaixo ----
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -203,8 +203,8 @@ public sealed class MixedProfilesScenario
                 db.Notifications.Add(Notification.Create(usga, user, NoticeUsgaGeneral, "Sem medida vinculada."));
                 db.Notifications.Add(Notification.Create(usga, user, NoticeUsga132, "Medida da USGA132.", disciplinaryCaseId: rU132.Summary.Id));
                 db.Notifications.Add(Notification.Create(trap, user, NoticeTrapGeneral, "Sem medida vinculada."));
-                db.Notifications.Add(Notification.Create(trap, user, NoticeTrap131, "Medida da TRAP131.", disciplinaryCaseId: rT131.Summary.Id));
-                db.Notifications.Add(Notification.Create(trap, user, NoticeTrap132, "Medida da TRAP132.", disciplinaryCaseId: rT132.Summary.Id));
+                db.Notifications.Add(Notification.Create(trap, user, NoticeTrap220, "Medida da TRAP220.", disciplinaryCaseId: rT220.Summary.Id));
+                db.Notifications.Add(Notification.Create(trap, user, NoticeTrap230, "Medida da TRAP230.", disciplinaryCaseId: rT230.Summary.Id));
             }
             await db.SaveChangesAsync();
         }
@@ -215,8 +215,8 @@ public sealed class MixedProfilesScenario
         {
             Usga131 = new(rU131.Summary.Id, rU131.Summary.CaseNumber, eU131, null),
             Usga132 = new(rU132.Summary.Id, rU132.Summary.CaseNumber, eU132, evU132),
-            Trap131 = new(rT131.Summary.Id, rT131.Summary.CaseNumber, eT131, null),
-            Trap132 = new(rT132.Summary.Id, rT132.Summary.CaseNumber, eT132, evT132),
+            Trap220 = new(rT220.Summary.Id, rT220.Summary.CaseNumber, eT220, null),
+            Trap230 = new(rT230.Summary.Id, rT230.Summary.CaseNumber, eT230, evT230),
             UsgaInfraction = usgaInfraction,
             TrapInfraction = trapInfraction,
             UsgaEmployeeBatch = usgaBatch,
@@ -229,8 +229,8 @@ public sealed class MixedProfilesScenario
             RegistrarUsgaManagerTrapId = regUsgaGesTrap.Id,
             UsgaUnit131 = uU131,
             UsgaUnit132 = uU132,
-            TrapUnit131 = uT131,
-            TrapUnit132 = uT132,
+            TrapUnit220 = uT220,
+            TrapUnit230 = uT230,
             UsgaName = usgaName,
             TrapName = trapName
         };

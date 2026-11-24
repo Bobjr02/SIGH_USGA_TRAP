@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using SIGH.Application.Disciplinary.Records;
+using SIGH.Application.Employees.Common;
 using SIGH.Domain.Disciplinary.Enums;
+using SIGH.Domain.Employees;
 
 namespace SIGH.Application.Disciplinary.History;
 
 public sealed record HistoryEmployeeRef(Guid Id, string EmployeeNumber, string FullName, Guid ManagementUnitId);
-public sealed record HistoryUnitRef(Guid Id, string? Code, string Name);
+public sealed record HistoryUnitRef(Guid Id, string? Code, string Name, bool IsActive = true);
 public sealed record HistoryInfractionRef(Guid Id, string Name);
 
 /// <summary>Registro histórico já gravado (de um lote anterior).</summary>
@@ -56,8 +59,10 @@ public sealed record HistoryImportPlan(
 /// <summary>
 /// Decide, linha a linha, o que a importação do histórico faria (nada é gravado aqui). Regras (HISTORICO.md):
 /// - funcionário pela matrícula entre os existentes; não encontrado → rejeitada (importe o SAP antes);
-/// - gerência da época pelo nome normalizado das 9 gerências; desconhecida → aviso e gerência atual;
-///   diferente da atual → aviso;
+/// - gerência da época pela Chave Organização ou pelo nome normalizado das gerências da empresa (com ou sem o
+///   "Gerência"/"Gerência de" do nome oficial, e os nomes antigos das planilhas, como "AGRÍCOLA URBANO" = USGA137);
+///   nome desconhecido → aviso e gerência atual; diferente da atual → aviso;
+/// - GERÊNCIA no formato de chave com o prefixo da empresa, mas fora do formato, fora da lista oficial ou inativa → rejeitada;
 /// - motivo pelo nome normalizado; novo → listado (criado na confirmação), com aviso;
 /// - chave (matrícula + data + tipo + motivo + início do período) repetida no arquivo → rejeitada;
 /// - contadores Nº ADVERTÊNCIA / Nº SUSPENSÃO recalculados por funcionário, por data (histórico já gravado +
@@ -65,7 +70,7 @@ public sealed record HistoryImportPlan(
 /// - mesma chave de um registro gravado: igual → já existente; diferente (gerência, período, dias) → atualizar;
 /// - registro gravado que não está no arquivo → "ausente da planilha atual" (nunca apagado).
 /// </summary>
-public static class HistoryImportPlanner
+public static partial class HistoryImportPlanner
 {
     public const string RejectedSeverity = "Error";
     public const string WarningSeverity = "Warning";
@@ -75,6 +80,56 @@ public static class HistoryImportPlanner
     /// <summary>GERÊNCIA que pertence a outra empresa (nome de uma gerência só dela, ou código com outro prefixo).</summary>
     public const string OtherCompanyMessage = "gerência de outra empresa — confira se o arquivo é desta empresa";
 
+    /// <summary>
+    /// Chaves de busca (normalizadas) de uma gerência na coluna GERÊNCIA: código, nome, nome sem o "Gerência"/"Gerência de"
+    /// inicial ("MANUTENÇÃO" = Gerência de Manutenção) e os nomes antigos da mesma chave ("AGRÍCOLA URBANO" = USGA137).
+    /// </summary>
+    public static IEnumerable<string> UnitKeys(string? code, string name)
+    {
+        yield return HistoryKeys.Normalize(code);
+        yield return HistoryKeys.Normalize(name);
+        yield return HistoryKeys.Normalize(ManagementWord().Replace(name.Trim(), string.Empty));
+        foreach (var (legacy, legacyCode) in OfficialManagementUnits.LegacyNames)
+            if (legacyCode == code)
+                yield return HistoryKeys.Normalize(legacy);
+    }
+
+    [GeneratedRegex(@"^ger[eê]ncia\s+(de\s+)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ManagementWord();
+
+    /// <summary>Texto com cara de Chave Organização: letras seguidas de dígitos (USGA131, TRAP12, TRAP1234).</summary>
+    [GeneratedRegex("^[A-Za-z]{2,}[0-9]+$", RegexOptions.CultureInvariant)]
+    private static partial Regex CodeLike();
+
+    /// <summary>Chave digitada com espaço entre as letras e os dígitos ("TRAP 230").</summary>
+    [GeneratedRegex(@"^[A-Za-z]{2,}\s+[0-9]+$", RegexOptions.CultureInvariant)]
+    private static partial Regex SpacedCode();
+
+    /// <summary>
+    /// A GERÊNCIA é uma Chave Organização com o prefixo desta empresa que não pode ser usada: fora dos dois formatos,
+    /// fora da lista oficial ou inativa. Devolve a mensagem da rejeição (null se a GERÊNCIA não é esse caso).
+    /// </summary>
+    private static string? OwnCodeProblem(string unitText, IReadOnlyDictionary<string, HistoryUnitRef> activeUnits,
+        IReadOnlyDictionary<string, HistoryUnitRef> inactiveUnits, HistoryReference reference)
+    {
+        var text = unitText.Trim();
+        var prefix = reference.ManagementUnitPrefix;
+        var key = HistoryKeys.Normalize(text);
+        if (key.Length == 0)
+            return null;
+        var upper = text.ToUpperInvariant();
+        var ownCodeLike = !string.IsNullOrEmpty(prefix) && text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                          && (upper == prefix || CodeLike().IsMatch(text) || SpacedCode().IsMatch(text));
+        // Chave desta empresa fora do formato (TRAP12, TRAP1234, "TRAP 230"): rejeitada mesmo que lembre uma chave oficial.
+        if (ownCodeLike && !ManagementUnitCodes.IsValid(upper, prefix))
+            return $"GERÊNCIA \"{text}\": Chave Organização fora do formato; use {ManagementUnitCodes.FormatHint(prefix!)}.";
+        if (activeUnits.ContainsKey(key))
+            return null;
+        if (inactiveUnits.TryGetValue(key, out var inactive))
+            return $"GERÊNCIA \"{text}\": a gerência {Describe(inactive)} está inativa no SIGH.";
+        return ownCodeLike ? $"GERÊNCIA \"{text}\": a Chave Organização não está na lista oficial de gerências desta empresa." : null;
+    }
+
     /// <summary>A GERÊNCIA da linha é de outra empresa (e não desta)?</summary>
     private static bool IsOtherCompanyUnit(string unitText, IReadOnlyDictionary<string, HistoryUnitRef> ownUnits, HistoryReference reference)
     {
@@ -83,10 +138,9 @@ public static class HistoryImportPlanner
             return false;
         if (reference.OtherCompanyUnitKeys?.Contains(key) == true)
             return true;
-        // Código no formato de Chave Organização (letras + dígitos, ex.: TRAP131) com prefixo de outra empresa.
+        // Código no formato de Chave Organização (letras + dígitos, ex.: TRAP230) com prefixo de outra empresa.
         var text = unitText.Trim();
-        var looksLikeCode = System.Text.RegularExpressions.Regex.IsMatch(text, "^[A-Za-z]{2,}[0-9]+$");
-        return looksLikeCode && !string.IsNullOrEmpty(reference.ManagementUnitPrefix)
+        return CodeLike().IsMatch(text) && !string.IsNullOrEmpty(reference.ManagementUnitPrefix)
                && !text.StartsWith(reference.ManagementUnitPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -98,10 +152,15 @@ public static class HistoryImportPlanner
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
         var newInfractions = new List<string>();
         var newInfractionKeys = new HashSet<string>(StringComparer.Ordinal);
-        var unitsByName = reference.Units
-            .SelectMany(u => new[] { (Key: HistoryKeys.Normalize(u.Name), Unit: u), (Key: HistoryKeys.Normalize(u.Code), Unit: u) })
+        // Gerências ativas pela chave de busca; o código vence o nome se os dois coincidirem.
+        static Dictionary<string, HistoryUnitRef> ByKey(IEnumerable<HistoryUnitRef> units) => units
+            .SelectMany(u => UnitKeys(u.Code, u.Name).Select((key, order) => (Key: key, Order: order, Unit: u)))
             .Where(x => x.Key.Length > 0)
-            .GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.First().Unit, StringComparer.Ordinal);
+            .GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.OrderBy(x => x.Order).First().Unit, StringComparer.Ordinal);
+        var unitsByName = ByKey(reference.Units.Where(u => u.IsActive));
+        var inactiveByName = ByKey(reference.Units.Where(u => !u.IsActive));
+        foreach (var key in unitsByName.Keys)
+            inactiveByName.Remove(key);
         var unitsById = reference.Units.ToDictionary(u => u.Id);
         var otherCompanyRows = 0;
 
@@ -110,6 +169,12 @@ public static class HistoryImportPlanner
             if (parsed is null)
             {
                 rejected.Add(new HistoryIssue(rowNumber, number, RejectedSeverity, error!));
+                continue;
+            }
+
+            if (OwnCodeProblem(parsed.UnitText, unitsByName, inactiveByName, reference) is { } unitProblem)
+            {
+                rejected.Add(new HistoryIssue(rowNumber, parsed.EmployeeNumber, RejectedSeverity, unitProblem));
                 continue;
             }
 

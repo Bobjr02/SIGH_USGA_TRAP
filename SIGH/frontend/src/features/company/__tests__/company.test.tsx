@@ -152,10 +152,10 @@ describe('importação por empresa', () => {
           summary: { totalRows: 2, created: 0, updated: 0, terminated: 0, terminatedByAbsence: 0, reactivated: 0, unchanged: 0, errors: 2, warnings: 0 },
           created: [], updated: [], toTerminate: [], reactivated: [], unchanged: [],
           errors: [
-            { row: 2, employeeNumber: '70090001', severity: 'Error', message: 'Chave Organização TRAP131: gerência de outra empresa — confira se o arquivo é desta empresa.' },
-            { row: 3, employeeNumber: '70090002', severity: 'Error', message: 'Chave Organização TRAP131: gerência de outra empresa — confira se o arquivo é desta empresa.' },
+            { row: 2, employeeNumber: '70090001', severity: 'Error', message: 'Chave Organização TRAP220: gerência de outra empresa — confira se o arquivo é desta empresa.' },
+            { row: 3, employeeNumber: '70090002', severity: 'Error', message: 'Chave Organização TRAP220: gerência de outra empresa — confira se o arquivo é desta empresa.' },
           ],
-          warnings: [], newManagementUnits: [], activeBefore: 0, absenceTerminationPercent: 0, maxTerminationPercent: 10,
+          warnings: [], activeBefore: 0, absenceTerminationPercent: 0, maxTerminationPercent: 10,
           requiresMassTerminationConfirmation: false, companyCode: 'USGA', companyName: 'Usina Serra Grande S.A.', otherCompanyRows: 2, looksLikeOtherCompany: true,
         }) as ImportPreview);
     renderApp('/employees/import');

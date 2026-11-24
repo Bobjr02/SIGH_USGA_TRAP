@@ -169,6 +169,12 @@ describe('registrar medida', () => {
     await choose(user, /motivo/i, 'Falta injustificada');
     await choose(user, /tipo de medida/i, 'Advertência escrita');
     fireEvent.change(screen.getByLabelText('Ocorrência 1'), { target: { value: '2026-11-09' } });
+    // Rótulo no singular com uma data e no plural ("Datas das ocorrências") com mais de uma.
+    expect(screen.getByText('Data da ocorrência')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Outra data' }));
+    expect(screen.getByText('Datas das ocorrências')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Remover ocorrência 2' }));
+    expect(screen.getByText('Data da ocorrência')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/data da medida/i), { target: { value: '2026-11-10' } });
     await user.type(screen.getByRole('textbox', { name: /descrição/i }), 'Faltou ao turno sem justificativa.');
 

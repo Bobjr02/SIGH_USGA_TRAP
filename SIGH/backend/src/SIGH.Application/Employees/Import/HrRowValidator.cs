@@ -104,7 +104,8 @@ public static class HrRowValidator
         var jobName = raw.Get(HrField.JobTitleName).Text.Trim();
         var deptCode = Required(raw, HrField.DepartmentCode, errors);
         var deptName = raw.Get(HrField.DepartmentName).Text.Trim();
-        var muCode = Required(raw, HrField.ManagementUnitCode, errors).ToUpperInvariant();
+        // Sem trocar maiúsculas: a chave fora do formato (inclusive em minúsculas) é rejeitada adiante, com a mensagem do formato.
+        var muCode = Required(raw, HrField.ManagementUnitCode, errors);
         if (jobCode.Length > 0 && jobName.Length == 0)
         {
             warnings.Add($"Descr.Cargo vazia: o cargo {jobCode} usa o código como descrição.");

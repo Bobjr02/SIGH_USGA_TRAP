@@ -383,7 +383,7 @@ export const UserDetailPage: React.FC = () => {
           <AssignRow
             label="Gerência"
             busy={busy}
-            options={(units.data ?? []).map((m) => ({ id: m.id, label: `${m.code} – ${m.name}` }))}
+            options={(units.data ?? []).filter((m) => m.isActive).map((m) => ({ id: m.id, label: `${m.code} – ${m.name}` }))}
             onAssign={(unitId, from, until) => assignUnit.mutate({ unitId, from, until })}
           />
         )}

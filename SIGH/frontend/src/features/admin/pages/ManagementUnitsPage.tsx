@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Paper, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Paper, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import { useAuth } from '../../../hooks/useAuth';
 import { PERMISSIONS } from '../../../auth/permissions';
 import { recordErrorMessage } from '../../records/api/recordsApi';
@@ -23,7 +23,10 @@ const UnitRow: React.FC<{ unit: ManagementUnit; canEdit: boolean }> = ({ unit, c
 
   return (
     <TableRow data-testid="management-unit-row">
-      <TableCell sx={{ fontWeight: 600 }}>{unit.code}</TableCell>
+      <TableCell sx={{ fontWeight: 600 }}>
+        {unit.code}
+        {!unit.isActive && <Chip size="small" label="Inativa" sx={{ ml: 1 }} />}
+      </TableCell>
       <TableCell>
         {canEdit ? (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -41,7 +44,7 @@ const UnitRow: React.FC<{ unit: ManagementUnit; canEdit: boolean }> = ({ unit, c
   );
 };
 
-/** As 9 gerências (Chave Organização do SAP), com edição do nome. */
+/** As gerências (Chave Organização do SAP) da lista oficial, com edição do nome. Inativas aparecem marcadas. */
 export const ManagementUnitsPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const units = useQuery({ queryKey: adminKeys.units, queryFn: adminApi.units });
@@ -49,7 +52,7 @@ export const ManagementUnitsPage: React.FC = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <PageHeader icon={<Building2 size={22} />} title="Gerências" subtitle="As 9 gerências da usina e o nome exibido de cada uma" />
+      <PageHeader icon={<Building2 size={22} />} title="Gerências" subtitle="As chaves organizacionais da empresa e o nome exibido de cada uma" />
       {units.isError && <Alert severity="error">{recordErrorMessage(units.error, 'Erro ao carregar as gerências.')}</Alert>}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
         <Table size="small" aria-label="Gerências">

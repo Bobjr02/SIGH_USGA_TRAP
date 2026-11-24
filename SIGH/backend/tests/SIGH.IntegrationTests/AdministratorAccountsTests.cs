@@ -305,6 +305,81 @@ public class AdministratorAccountsTests : IntegrationTestBase
         }
     }
 
+    [Fact]
+    public async Task AdminRecover_InACompanyWithCurrentAdministrators_EmailsThemWhoReceivedTheProfileAndWhen()
+    {
+        var trapAdmin = await AccessTestHelpers.CreateUserAsync(Factory, "admin.vigente.trap@sigh.test",
+            [new RoleGrant(SystemRoles.Administrator, CompanyId: DatabaseSeeder.TrapicheCompanyId)]);
+        var expired = await AccessTestHelpers.CreateUserAsync(Factory, "admin.vencido.trap@sigh.test",
+            [new RoleGrant(SystemRoles.Administrator, ValidUntil: DateTimeOffset.UtcNow.AddDays(-1), CompanyId: DatabaseSeeder.TrapicheCompanyId)]);
+        var usgaAdmin = await AccessTestHelpers.CreateUserAsync(Factory, "admin.so.usga@sigh.test", SystemRoles.Administrator);
+        var when = Factory.Clock.UtcNow;
+
+        var exit = await AdminRecoveryCommand.RunAsync(Factory.Services,
+            ["admin-recover", "--company", "TRAP", "--email", "novo.admin.aviso@usga.com.br", "--name", "NOVO ADMIN DO AVISO TESTE"], new StringWriter());
+
+        exit.Should().Be(0);
+        var outbox = await OutboxAsync();
+        var notice = outbox.Should().ContainSingle(m => m.To == trapAdmin.Email && m.Template == EmailTemplates.AdministratorRecoveredNoticeTemplate).Subject;
+        notice.Subject.Should().Contain("Novo administrador").And.Contain("Trapiche");
+        var brasilia = TimeZoneInfo.ConvertTime(when, TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "E. South America Standard Time" : "America/Sao_Paulo"));
+        notice.TextBody.Should().Contain("linha de comando")
+            .And.Contain("NOVO ADMIN DO AVISO TESTE (novo.admin.aviso@usga.com.br)")
+            .And.Contain($"Quando: {brasilia:dd/MM/yyyy}")
+            .And.NotContain("reset-password", "o aviso não traz link de definição de senha");
+        outbox.Should().NotContain(m => m.Template == EmailTemplates.AdministratorRecoveredNoticeTemplate
+            && (m.To == "novo.admin.aviso@usga.com.br" || m.To == usgaAdmin.Email || m.To == expired.Email),
+            "só os administradores VIGENTES da empresa (fora quem recebeu o perfil) são avisados");
+        outbox.Should().ContainSingle(m => m.To == "novo.admin.aviso@usga.com.br" && m.Template == EmailTemplates.AdministratorAccessTemplate);
+    }
+
+    [Fact]
+    public async Task AdminRecover_InACompanyWithoutOtherAdministrators_SendsNoNotice()
+    {
+        await RemoveFixtureAdministratorsAsync();
+        await RemoveSeedAdministratorAsync();
+        await RemoveAdministratorsAsync(DatabaseSeeder.DefaultCompanyId);
+
+        (await AdminRecoveryCommand.RunAsync(Factory.Services, ["admin-recover", "--company", "USGA", "--email", "sozinho.usga@usga.com.br"], new StringWriter()))
+            .Should().Be(0);
+
+        (await OutboxAsync()).Should().NotContain(m => m.Template == EmailTemplates.AdministratorRecoveredNoticeTemplate);
+    }
+
+    [Fact]
+    public async Task TechnicalCpf_OfAdministratorsCreatedByTheSeedOrTheCommandLine_IsMarked_Invalid_Unique_AndNeverShown()
+    {
+        foreach (var email in new[] { "tecnico.um@usga.com.br", "tecnico.dois@usga.com.br" })
+            (await AdminRecoveryCommand.RunAsync(Factory.Services, ["admin-recover", "--company", "TRAP", "--email", email], new StringWriter())).Should().Be(0);
+
+        List<User> technical;
+        await using (var scope = Factory.Services.CreateAsyncScope())
+            technical = await scope.ServiceProvider.GetRequiredService<SighDbContext>().Users.AsNoTracking()
+                .Where(u => u.Email == "tecnico.um@usga.com.br" || u.Email == "tecnico.dois@usga.com.br" || u.Email == CustomWebApplicationFactory.SeedAdminEmail)
+                .ToListAsync();
+        technical.Should().HaveCount(3);
+        technical.Select(u => u.Cpf).Should().OnlyHaveUniqueItems().And.OnlyContain(c => TechnicalCpf.IsTechnical(c));
+        technical.Select(u => u.Cpf).Should().OnlyContain(c => !SIGH.Domain.Employees.Helpers.CpfValidator.IsValid(c), "não passa na validação de CPF real");
+
+        using var admin = await AccessTestHelpers.FixtureAdminAsync(Factory);
+        var seedAdmin = technical.Single(u => u.Email == CustomWebApplicationFactory.SeedAdminEmail);
+        var detail = JsonDocument.Parse(await (await admin.GetAsync($"/api/v1/users/{seedAdmin.Id}")).Content.ReadAsStringAsync()).RootElement;
+        detail.GetProperty("data").GetProperty("cpf").GetString().Should().BeEmpty("a tela e a API não mostram o CPF técnico");
+        var list = JsonDocument.Parse(await (await admin.GetAsync("/api/v1/users?pageSize=100")).Content.ReadAsStringAsync()).RootElement
+            .GetProperty("data").GetProperty("items").EnumerateArray().ToList();
+        list.Should().Contain(u => u.GetProperty("id").GetGuid() == seedAdmin.Id);
+        list.Select(u => u.GetProperty("cpf").GetString()).Should().OnlyContain(c => !TechnicalCpf.IsTechnical(c), "a lista não mostra CPF técnico");
+        var search = JsonDocument.Parse(await (await admin.GetAsync($"/api/v1/users?searchTerm={seedAdmin.Cpf}")).Content.ReadAsStringAsync()).RootElement;
+        search.GetProperty("data").GetProperty("items").GetArrayLength().Should().Be(0, "a busca por CPF não encontra o CPF técnico");
+
+        var create = await admin.PostAsJsonAsync("/api/v1/users", new
+        {
+            fullName = "PESSOA COM CPF TECNICO TESTE", email = "cpf.tecnico@sigh.test", cpf = "00000000055",
+            roleIds = new[] { await RoleIdAsync(SystemRoles.HrRegistrar) }, managementUnitIds = Array.Empty<Guid>()
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.BadRequest, "a faixa técnica não é aceita no cadastro manual");
+    }
+
     [Theory]
     [InlineData(1, "admin-recover", "--company", "TRAP")]
     [InlineData(1, "admin-recover", "--email", "x@usga.com.br")]
@@ -406,6 +481,17 @@ public class AdministratorAccountsTests : IntegrationTestBase
         await using var scope = Factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
         (await db.Users.SingleAsync(u => u.Email == CustomWebApplicationFactory.SeedAdminEmail)).Status = UserStatus.Inactive;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Encerra (vigência no passado) todo perfil Administrador da empresa.</summary>
+    private async Task RemoveAdministratorsAsync(Guid companyId)
+    {
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
+        var links = await db.UserRoles.Where(ur => ur.CompanyId == companyId && ur.Role.Name == SystemRoles.Administrator).ToListAsync();
+        foreach (var link in links)
+            link.ValidUntil = DateTimeOffset.UtcNow.AddDays(-1);
         await db.SaveChangesAsync();
     }
 

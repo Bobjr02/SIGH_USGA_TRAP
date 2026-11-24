@@ -18,6 +18,20 @@ public class ImportOptions
 
     /// <summary>Por quanto tempo a pré-visualização pode ser confirmada.</summary>
     public int PreviewValidityMinutes { get; set; } = 30;
+
+    /// <summary>Chave Organização dos autônomos, que não fazem parte do SIGH (padrão: TRAPAUT).</summary>
+    public static readonly string[] DefaultIgnoredManagementUnitCodes = ["TRAPAUT"];
+
+    /// <summary>
+    /// Import:IgnoredManagementUnitCodes: chaves cujas linhas a importação de funcionários ignora (não entram, não contam
+    /// como erro nem para o alerta de outra empresa; só aparecem no contador de ignoradas). Sem a chave: <see cref="DefaultIgnoredManagementUnitCodes"/>.
+    /// </summary>
+    public string[]? IgnoredManagementUnitCodes { get; set; }
+
+    public IReadOnlySet<string> IgnoredManagementUnitCodeSet() =>
+        (IgnoredManagementUnitCodes ?? DefaultIgnoredManagementUnitCodes)
+        .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim())
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }
 
 public static class EmployeeImportErrors
@@ -54,7 +68,6 @@ public sealed record EmployeeImportPreviewDto(
     IReadOnlyList<string> Unchanged,
     IReadOnlyList<ImportIssueDto> Errors,
     IReadOnlyList<ImportIssueDto> Warnings,
-    IReadOnlyList<string> NewManagementUnits,
     int ActiveBefore,
     double AbsenceTerminationPercent,
     double MaxTerminationPercent,
@@ -65,7 +78,9 @@ public sealed record EmployeeImportPreviewDto(
     /// <summary>Linhas rejeitadas por Chave Organização de outra empresa.</summary>
     int OtherCompanyRows = 0,
     /// <summary>Mais da metade das linhas é de outra empresa: alerta grande no topo (e a confirmação é recusada).</summary>
-    bool LooksLikeOtherCompany = false);
+    bool LooksLikeOtherCompany = false,
+    /// <summary>Linhas de autônomos ignoradas (Import:IgnoredManagementUnitCodes).</summary>
+    int IgnoredRows = 0);
 
 public sealed record EmployeeImportResultDto(Guid BatchId, ImportSummaryDto Summary, DateTimeOffset AppliedAt);
 
@@ -222,7 +237,7 @@ public sealed class EmployeeImportService : IEmployeeImportService
 
         var (employees, references) = await _store.LoadSnapshotAsync(company.Id, cancellationToken);
         var plan = EmployeeImportPlanner.Plan(sheet.Rows, sheet.Warnings, employees, references, ImportDate(), _options.MaxTerminationPercent,
-            company.ManagementUnitPrefix);
+            company.ManagementUnitPrefix, _options.IgnoredManagementUnitCodeSet());
         return (hash, plan, null);
     }
 
@@ -260,7 +275,6 @@ public sealed class EmployeeImportService : IEmployeeImportService
             plan.UnchangedEmployeeNumbers,
             plan.Issues.Where(i => i.Severity == HrIssueSeverity.Error).Select(Issue).ToList(),
             plan.Issues.Where(i => i.Severity == HrIssueSeverity.Warning).Select(Issue).ToList(),
-            plan.NewManagementUnits,
             plan.ActiveBefore,
             plan.AbsenceTerminationPercent,
             _options.MaxTerminationPercent,
@@ -268,7 +282,8 @@ public sealed class EmployeeImportService : IEmployeeImportService
             company.Code,
             company.Name,
             plan.OtherCompanyRows,
-            plan.LooksLikeOtherCompany);
+            plan.LooksLikeOtherCompany,
+            plan.IgnoredRows);
     }
 
     private static TimeZoneInfo FindBrasilia()

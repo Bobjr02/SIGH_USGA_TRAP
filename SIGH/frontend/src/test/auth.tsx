@@ -14,7 +14,7 @@ export const API = '/api/v1';
 export const makeUser = (overrides: Partial<CurrentUser> = {}): CurrentUser => ({
   id: '0b6c1d3e-0000-4000-8000-000000000001',
   fullName: 'Maria Gestora',
-  email: 'maria@sigh.com.br',
+  email: 'maria@sigh.test',
   status: 'Active',
   mustChangePassword: false,
   roles: ['Gestor'],

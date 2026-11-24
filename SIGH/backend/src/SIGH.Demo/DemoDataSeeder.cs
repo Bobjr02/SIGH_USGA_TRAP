@@ -62,7 +62,7 @@ public sealed class DemoDataSeeder
         // Por empresa: Trapiche (o admin.trap é o primeiro administrador da Trapiche na demonstração).
         new("auxiliar.trap", "AUXILIAR DA TRAPICHE DEMO TESTE", SyntheticCpf("900000012"), [SystemRoles.HrRegistrar], [], CompanyDefaults.TrapicheCode),
         new("encarregado.trap", "ENCARREGADO DA TRAPICHE DEMO TESTE", SyntheticCpf("900000013"), [SystemRoles.HrApprover], [], CompanyDefaults.TrapicheCode),
-        new("gestor.trap131", "GESTOR DA TRAP131 DEMO TESTE", SyntheticCpf("900000014"), [SystemRoles.Manager], ["TRAP131"], CompanyDefaults.TrapicheCode),
+        new("gestor.trap220", "GESTOR DA TRAP220 DEMO TESTE", SyntheticCpf("900000014"), [SystemRoles.Manager], ["TRAP220"], CompanyDefaults.TrapicheCode),
     ];
 
     /// <summary>Primeiro administrador da Trapiche na demonstração (na instalação real vem de Seed:Companies:TRAP:AdminEmail).</summary>
@@ -77,11 +77,11 @@ public sealed class DemoDataSeeder
     /// <summary>Medidas fictícias da Trapiche em vários estados (registradas pelo auxiliar.trap, revistas pelo encarregado.trap).</summary>
     private static readonly DemoRecord[] TrapicheRecords =
     [
-        new(1, "70090001", DisciplinaryMeasureType.WrittenWarning, "FALTA_INJUSTIFICADA", 14, Outcome.Approved, WithAttachment: true), // TRAP131
-        new(2, "70090003", DisciplinaryMeasureType.Suspension, "EPI", 10, Outcome.Approved, SuspensionDays: 1),                      // TRAP131
-        new(3, "70090007", DisciplinaryMeasureType.VerbalWarning, "ATRASO", 5, Outcome.Pending),                                      // TRAP132
-        new(4, "70090009", DisciplinaryMeasureType.WrittenWarning, "EPI", 7, Outcome.Rejected),                                       // TRAP132
-        new(5, "70090011", DisciplinaryMeasureType.VerbalWarning, "ATRASO", 8, Outcome.Cancelled),                                    // TRAP132
+        new(1, "70090001", DisciplinaryMeasureType.WrittenWarning, "FALTA_INJUSTIFICADA", 14, Outcome.Approved, WithAttachment: true), // TRAP220
+        new(2, "70090003", DisciplinaryMeasureType.Suspension, "EPI", 10, Outcome.Approved, SuspensionDays: 1),                      // TRAP220
+        new(3, "70090007", DisciplinaryMeasureType.VerbalWarning, "ATRASO", 5, Outcome.Pending),                                      // TRAP230
+        new(4, "70090009", DisciplinaryMeasureType.WrittenWarning, "EPI", 7, Outcome.Rejected),                                       // TRAP230
+        new(5, "70090011", DisciplinaryMeasureType.VerbalWarning, "ATRASO", 8, Outcome.Cancelled),                                    // TRAP230
     ];
 
     /// <summary>3 aprovadas, 1 suspensão aprovada, 2 pendentes, 1 rejeitada aguardando correção e 1 cancelada.</summary>
@@ -140,7 +140,9 @@ public sealed class DemoDataSeeder
             const string trap = CompanyDefaults.TrapicheCode;
 
             // USGA: os arquivos fictícios do pacote de referência.
-            var usgaEmployees = await File.ReadAllBytesAsync(Path.Combine(DataPath(), "importacao-funcionarios", "funcionarios_carga_inicial.xlsx"), cancellationToken);
+            // A carga do pacote ganha 3 funcionários fictícios nas chaves USGA, USGA010 e USGA161 (os dois formatos de chave).
+            var usgaEmployees = UsgaDemoSpreadsheet.WithExtraEmployees(
+                await File.ReadAllBytesAsync(Path.Combine(DataPath(), "importacao-funcionarios", "funcionarios_carga_inicial.xlsx"), cancellationToken));
             await ImportEmployeesAsync(adminId, usga, usgaEmployees, "funcionarios_carga_inicial.xlsx", cancellationToken);
             var infractions = new Dictionary<string, Dictionary<string, Guid>>
             {
@@ -149,7 +151,8 @@ public sealed class DemoDataSeeder
             var usgaHistory = await File.ReadAllBytesAsync(Path.Combine(DataPath(), "historico-disciplinar", "base_disciplinar_ficticia.xlsx"), cancellationToken);
             await ImportHistoryAsync(adminId, usga, usgaHistory, "base_disciplinar_ficticia.xlsx", cancellationToken);
 
-            // Trapiche: planilhas FICTÍCIAS geradas por código (TRAP131/TRAP132, nomes TESTE).
+            // Trapiche: planilhas FICTÍCIAS geradas por código (TRAP, TRAP180, TRAP220, TRAP230 e 2 autônomos TRAPAUT
+            // ignorados; nomes TESTE).
             var trapAdminId = await EnsureTrapicheAdminAsync(cancellationToken);
             await ImportEmployeesAsync(trapAdminId, trap, TrapicheDemoSpreadsheets.EmployeesXlsx(), "funcionarios_trapiche_ficticio.xlsx", cancellationToken);
             infractions[trap] = await EnsureInfractionTypesAsync(trapAdminId, trap, cancellationToken);

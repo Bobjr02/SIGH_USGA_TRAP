@@ -86,7 +86,7 @@ cat <<INFO
    Trapiche
    admin.trap@demo.local          Administrador da Trapiche
    auxiliar.trap@demo.local       RH – Registro       encarregado.trap@demo.local   RH – Aprovador
-   gestor.trap131@demo.local      Gestor da TRAP131
+   gestor.trap220@demo.local      Gestor da TRAP220
    As duas empresas (seletor "Empresa" no topo)
    juridico@demo.local            Jurídico na USGA e na Trapiche
    admin.grupo@demo.local         Administrador na USGA e na Trapiche

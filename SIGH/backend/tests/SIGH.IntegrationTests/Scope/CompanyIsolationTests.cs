@@ -63,7 +63,7 @@ public class CompanyIsolationTests : IClassFixture<CustomWebApplicationFactory>
         ["GET /api/v1/employees"] = (Probe)Contains(_ => "/api/v1/employees?pageSize=100", s => s.TrapEmployeeNumber),
         ["GET /api/v1/employees/{id:guid}"] = (Probe)Found(s => $"/api/v1/employees/{s.TrapEmployee}"),
         ["GET /api/v1/employees/{id:guid}/decision-support"] = (Probe)Found(s => $"/api/v1/employees/{s.TrapEmployee}/decision-support"),
-        ["GET /api/v1/employees/filter-options"] = (Probe)Contains(_ => "/api/v1/employees/filter-options", _ => "TRAP131"),
+        ["GET /api/v1/employees/filter-options"] = (Probe)Contains(_ => "/api/v1/employees/filter-options", _ => "TRAP220"),
 
         ["GET /api/v1/disciplinary-records"] = (Probe)Contains(_ => "/api/v1/disciplinary-records?pageSize=100", s => s.TrapRecord.ToString()),
         ["GET /api/v1/disciplinary-records/{id:guid}"] = (Probe)Found(s => $"/api/v1/disciplinary-records/{s.TrapRecord}"),
@@ -94,7 +94,7 @@ public class CompanyIsolationTests : IClassFixture<CustomWebApplicationFactory>
         ["GET /api/v1/users/{id:guid}"] = (Probe)Found(s => $"/api/v1/users/{s.TrapManagerUserId}"),
         ["GET /api/v1/users/{id:guid}/access"] = (Probe)Found(s => $"/api/v1/users/{s.TrapManagerUserId}/access"),
         ["GET /api/v1/users/admin-status"] = (Probe)Contains(_ => "/api/v1/users/admin-status", _ => "\"companyCode\":\"TRAP\""),
-        ["GET /api/v1/management-units"] = (Probe)Contains(_ => "/api/v1/management-units", _ => "TRAP131"),
+        ["GET /api/v1/management-units"] = (Probe)Contains(_ => "/api/v1/management-units", _ => "TRAP220"),
 
         ["GET /api/v1/infraction-types"] = (Probe)Contains(_ => "/api/v1/infraction-types?pageSize=100", _ => CompanyScenario.TrapInfractionCode),
         ["GET /api/v1/infraction-types/{id:guid}"] = (Probe)Found(s => $"/api/v1/infraction-types/{s.TrapInfraction}"),

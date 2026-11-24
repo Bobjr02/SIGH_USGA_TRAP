@@ -225,6 +225,11 @@ export const EmployeeImportPage: React.FC = () => {
               {countOf(preview.summary.totalRows, 'linha', 'linhas')} · {formatNumber(preview.summary.unchanged)} sem mudança · válida até{' '}
               {new Date(preview.expiresAt).toLocaleTimeString('pt-BR')}
             </Typography>
+            {!!preview.ignoredRows && (
+              <Typography variant="body2" color="text.secondary" data-testid="ignored-rows">
+                {countOf(preview.ignoredRows, 'linha de autônomos ignorada', 'linhas de autônomos ignoradas')}
+              </Typography>
+            )}
             {/* Avisos do arquivo inteiro (ex.: coluna opcional ausente) ficam no topo, não só na aba Avisos. */}
             {preview.warnings
               .filter((w) => w.row == null)

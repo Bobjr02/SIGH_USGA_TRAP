@@ -37,7 +37,7 @@ public class EmployeesQueryTests : IntegrationTestBase
         ana.CpfMasked.Should().Be($"***.{anaCpf[3..6]}.{anaCpf[6..9]}-**");
         ana.Group.Should().Be(EmployeeGroup.Field);
         ana.ManagementUnitCode.Should().Be("USGA141");
-        ana.ManagementUnitName.Should().Be("Agrícola Rurícola");
+        ana.ManagementUnitName.Should().Be("Gerência Agrícola Rural");
         ana.DepartmentCode.Should().Be("60002000");
         (await admin.GetStringAsync("/api/v1/employees?pageSize=50")).Should().NotContain(anaCpf, "a lista nunca traz o CPF completo");
 
@@ -53,7 +53,11 @@ public class EmployeesQueryTests : IntegrationTestBase
         detail.JobTitleCode.Should().Be("50001234");
 
         var options = (await admin.GetFromJsonAsync<Result<EmployeeFilterOptionsDto>>("/api/v1/employees/filter-options"))!.Data!;
-        options.ManagementUnits.Should().HaveCountGreaterOrEqualTo(9).And.Contain(m => m.Code == "USGA131" && m.Name == "Industrial");
+        options.ManagementUnits.Should().Contain(m => m.Code == "USGA131" && m.Name == "Gerência Industrial");
+        // As 12 chaves oficiais da USGA, a sem sufixo primeiro e depois os números (USGA, USGA010, USGA131…).
+        options.ManagementUnits.Select(m => m.Code).Should()
+            .ContainInOrder(SIGH.Application.Employees.Common.OfficialManagementUnits.ForPrefix("USGA").Select(u => u.Code))
+            .And.NotContain(c => c != null && c.StartsWith("TRAP"));
         options.Departments.Should().Contain(d => d.Code == "60002000" && d.Name == "Corte");
     }
 

@@ -82,7 +82,7 @@ services:
       Auth__AllowedEmailDomains__1: demo.local
       Auth__AllowedEmailDomains__2: e2e.local
       Auth__AllowedEmailDomains__3: sigh.local
-      Auth__AllowedEmailDomains__4: sigh.com.br
+      Auth__AllowedEmailDomains__4: sigh.test
       Seed__DemoData: "true"
       Seed__DemoPassword: ${SIGH_DEMO_PASSWORD:?Rode scripts/local-up para gerar o .env.local}
       Seed__DemoDataPath: /demo-data

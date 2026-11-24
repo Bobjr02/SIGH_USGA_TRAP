@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SIGH.Application.Common.Authorization;
+using SIGH.Application.Employees.Common;
+using SIGH.Domain.Employees;
 using SIGH.Application.Interfaces;
 using SIGH.Persistence.Context;
 
@@ -299,34 +301,123 @@ public sealed class DatabaseSeeder
     }
 
     /// <summary>
-    /// Gerências (Chave Organização do SAP) de Seed:ManagementUnits (código e nome). Só cria as que
-    /// faltam: nomes já existentes nunca são sobrescritos, para continuarem editáveis.
+    /// Gerências (Chave Organização do SAP): a lista oficial do cliente (<see cref="OfficialManagementUnits"/>), criada ou
+    /// atualizada por código, cada uma na empresa do seu prefixo (Company.ManagementUnitPrefix), ativa e com o nome oficial.
+    /// O nome oficial substitui o do seed antigo e o nome provisório (o próprio código, das gerências criadas pela
+    /// importação); um nome editado por alguém na tela é mantido. Chave que está no banco e não está na lista: desativada
+    /// se não tiver funcionários, medidas nem gestores vinculados; se tiver, continua ativa e o log registra um aviso com
+    /// as quantidades. Nada é apagado.
     /// </summary>
     private async Task EnsureManagementUnitsAsync(CancellationToken cancellationToken)
     {
-        var configured = _configuration.GetSection("Seed:ManagementUnits").GetChildren()
-            .Select(s => (Code: s["Code"]?.Trim(), Name: s["Name"]?.Trim()))
-            .Where(x => !string.IsNullOrEmpty(x.Code) && !string.IsNullOrEmpty(x.Name))
-            .ToList();
-        if (configured.Count == 0)
-            return;
-
-        var existingCodes = await _context.ManagementUnits
-            .IgnoreQueryFilters()
-            .Where(m => m.CompanyId == DefaultCompanyId && m.Code != null)
-            .Select(m => m.Code!)
+        var companies = await _context.Companies.IgnoreQueryFilters()
+            .Where(c => c.ManagementUnitPrefix != "")
             .ToListAsync(cancellationToken);
+        var units = await _context.ManagementUnits.IgnoreQueryFilters().ToListAsync(cancellationToken);
 
         var created = 0;
-        foreach (var (code, name) in configured)
+        var updated = 0;
+        var official = new HashSet<Guid>();
+        foreach (var item in OfficialManagementUnits.All)
         {
-            if (existingCodes.Contains(code!, StringComparer.OrdinalIgnoreCase))
+            var company = companies.FirstOrDefault(c => ManagementUnitCodes.IsValid(item.Code, c.ManagementUnitPrefix));
+            if (company is null)
+            {
+                _logger.LogWarning("Seed: nenhuma empresa tem o prefixo da chave {Code}; a gerência não foi criada.", item.Code);
                 continue;
-            await _context.ManagementUnits.AddAsync(ManagementUnit.Create(DefaultCompanyId, name!, code), cancellationToken);
-            created++;
+            }
+
+            var unit = units.FirstOrDefault(u => u.CompanyId == company.Id && string.Equals(u.Code, item.Code, StringComparison.OrdinalIgnoreCase));
+            if (unit is null)
+            {
+                unit = ManagementUnit.Create(company.Id, item.Name, item.Code);
+                await _context.ManagementUnits.AddAsync(unit, cancellationToken);
+                units.Add(unit);
+                created++;
+            }
+            else
+            {
+                var changed = false;
+                if (unit.IsDeleted)
+                {
+                    unit.IsDeleted = false;
+                    unit.DeletedAt = null;
+                    unit.DeletedBy = null;
+                    changed = true;
+                }
+                if (!unit.IsActive)
+                {
+                    unit.Activate();
+                    changed = true;
+                }
+                if (unit.Code != item.Code)
+                {
+                    unit.UpdateCode(item.Code);
+                    changed = true;
+                }
+                if (unit.Name != item.Name)
+                {
+                    if (IsProvisionalName(unit.Name, item.Code))
+                    {
+                        unit.UpdateName(item.Name);
+                        changed = true;
+                    }
+                    else
+                        _logger.LogInformation("Seed: gerência {Code} mantém o nome editado \"{Name}\" (nome oficial: \"{Official}\").", item.Code, unit.Name, item.Name);
+                }
+                if (changed)
+                    updated++;
+            }
+            official.Add(unit.Id);
         }
 
         if (created > 0)
-            _logger.LogInformation("Seed: {Count} gerências criadas.", created);
+            _logger.LogInformation("Seed: {Count} gerências da lista oficial criadas.", created);
+        if (updated > 0)
+            _logger.LogInformation("Seed: {Count} gerências da lista oficial atualizadas.", updated);
+
+        await DeactivateUnofficialUnitsAsync(units.Where(u => u.Code != null && !u.IsDeleted && u.IsActive && !official.Contains(u.Id)).ToList(), cancellationToken);
+    }
+
+    /// <summary>O nome atual não foi escolhido por uma pessoa: o código (gerência criada pela importação) ou o nome do seed antigo.</summary>
+    private static bool IsProvisionalName(string name, string code) =>
+        string.Equals(name, code, StringComparison.OrdinalIgnoreCase)
+        || OfficialManagementUnits.LegacyNames.TryGetValue(name, out var legacyCode) && legacyCode == code;
+
+    private async Task DeactivateUnofficialUnitsAsync(List<ManagementUnit> unofficial, CancellationToken cancellationToken)
+    {
+        if (unofficial.Count == 0)
+            return;
+
+        var ids = unofficial.Select(u => u.Id).ToList();
+        var employees = await _context.Employees.IgnoreQueryFilters().Where(e => ids.Contains(e.ManagementUnitId))
+            .GroupBy(e => e.ManagementUnitId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
+        var measures = await _context.DisciplinaryCaseEmployees.IgnoreQueryFilters()
+            .Where(x => x.ManagementUnitIdAtTime != null && ids.Contains(x.ManagementUnitIdAtTime.Value))
+            .GroupBy(x => x.ManagementUnitIdAtTime!.Value).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
+        var managers = await _context.UserManagementUnits.Where(x => ids.Contains(x.ManagementUnitId))
+            .GroupBy(x => x.ManagementUnitId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
+
+        var deactivated = 0;
+        foreach (var unit in unofficial)
+        {
+            var e = employees.GetValueOrDefault(unit.Id);
+            var m = measures.GetValueOrDefault(unit.Id);
+            var g = managers.GetValueOrDefault(unit.Id);
+            if (e == 0 && m == 0 && g == 0)
+            {
+                unit.Deactivate();
+                deactivated++;
+                _logger.LogInformation("Seed: gerência {Code} ({Name}) fora da lista oficial e sem vínculos: desativada.", unit.Code ?? "(sem código)", unit.Name);
+                continue;
+            }
+
+            _logger.LogWarning(
+                "Seed: gerência {Code} ({Name}) fora da lista oficial continua ativa porque tem vínculos: {Employees} funcionários, {Measures} medidas, {Managers} gestores. Transfira os vínculos para uma chave oficial.",
+                unit.Code ?? "(sem código)", unit.Name, e, m, g);
+        }
+
+        if (deactivated > 0)
+            _logger.LogInformation("Seed: {Count} gerências fora da lista oficial desativadas.", deactivated);
     }
 }

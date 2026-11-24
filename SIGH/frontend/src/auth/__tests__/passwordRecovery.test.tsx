@@ -30,11 +30,11 @@ describe('forgot password', () => {
     renderApp('/forgot-password');
     const user = userEvent.setup();
 
-    await user.type(await screen.findByLabelText(/e-mail/i), 'maria@sigh.com.br');
+    await user.type(await screen.findByLabelText(/e-mail/i), 'maria@sigh.test');
     await user.click(screen.getByRole('button', { name: 'Enviar link' }));
 
     expect(await screen.findByText(GENERIC)).toBeInTheDocument();
-    expect(body).toEqual({ email: 'maria@sigh.com.br' });
+    expect(body).toEqual({ email: 'maria@sigh.test' });
     expect(screen.queryByRole('button', { name: 'Enviar link' })).not.toBeInTheDocument();
   });
 
@@ -62,7 +62,7 @@ describe('forgot password', () => {
     renderApp('/forgot-password');
     const user = userEvent.setup();
 
-    await user.type(await screen.findByLabelText(/e-mail/i), 'maria@sigh.com.br');
+    await user.type(await screen.findByLabelText(/e-mail/i), 'maria@sigh.test');
     await user.click(screen.getByRole('button', { name: 'Enviar link' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/muitas tentativas/i);

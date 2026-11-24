@@ -73,7 +73,7 @@ public class EmployeeImportTests : IntegrationTestBase
         var bruno = employees.Single(e => e.EmployeeNumber == "50090002");
         bruno.Group.Should().Be(EmployeeGroup.Field);
         bruno.Team.Should().Be("A");
-        (await db.ManagementUnits.SingleAsync(m => m.Id == bruno.ManagementUnitId)).Name.Should().Be("Agrícola Rurícola");
+        (await db.ManagementUnits.SingleAsync(m => m.Id == bruno.ManagementUnitId)).Name.Should().Be("Gerência Agrícola Rural");
         (await db.JobTitles.SingleAsync(j => j.Id == bruno.JobTitleId)).Code.Should().Be("50001234");
         (await db.Departments.SingleAsync(d => d.Id == bruno.DepartmentId)).Name.Should().Be("Corte");
 
@@ -124,7 +124,8 @@ public class EmployeeImportTests : IntegrationTestBase
             // 50090003 ausente → desligada por ausência
             .Add(new R("50090004", "Davi Sintético Quatro", HrXlsxBuilder.Cpf(4), Admission: "01/11/2026"))                   // reativado
             .Add(new R("50090005", "Eva Sintética Cinco", CpfWithLeadingZero))                                                // sem mudança
-            .Add(new R("50090006", "Fábio Sintético Seis", HrXlsxBuilder.Cpf(6), ManagementUnit: "USGA999"))                  // novo, gerência desconhecida
+            .Add(new R("50090006", "Fábio Sintético Seis", HrXlsxBuilder.Cpf(6), ManagementUnit: "USGA010"))                  // novo, na Superintendência
+            .Add(new R("50090008", "Gil Sintético Oito", HrXlsxBuilder.Cpf(8), ManagementUnit: "USGA999"))                    // chave fora da lista oficial: rejeitada
             .Add(new R("50090007", "Bruno Sintético Dois", HrXlsxBuilder.Cpf(2), Admission: "05/11/2026"))                    // readmissão do CPF do Bruno
             .Build();
 
@@ -137,10 +138,10 @@ public class EmployeeImportTests : IntegrationTestBase
         preview.ToTerminate.Should().ContainSingle(c => c.EmployeeNumber == "50090003");
         preview.Reactivated.Should().ContainSingle(c => c.EmployeeNumber == "50090004");
         preview.Unchanged.Should().Equal("50090005");
-        preview.Errors.Should().BeEmpty();
+        preview.Errors.Should().ContainSingle().Which.Should().Match<ImportIssueDto>(e =>
+            e.EmployeeNumber == "50090008" && e.Message.Contains("USGA999") && e.Message.Contains("não está na lista oficial"));
         preview.Warnings.Should().Contain(w => w.EmployeeNumber == "50090007" && w.Message.Contains("Possível readmissão") && w.Message.Contains("50090002"));
         preview.Errors.Should().NotContain(e => e.Message.Contains("CPF repetido"));
-        preview.Warnings.Should().Contain(w => w.Message.Contains("USGA999"));
         preview.Warnings.Should().NotContain(w => w.Message.Contains(HrXlsxBuilder.Cpf(2)), "mensagens nunca trazem o CPF");
 
         // 1 ausente em 4 ativos (25%) > 10%: exige confirmação explícita.
@@ -160,7 +161,8 @@ public class EmployeeImportTests : IntegrationTestBase
         all["50090004"].Status.Should().Be(EmployeeStatus.Active);
         all["50090004"].TerminationDate.Should().BeNull();
         all["50090007"].Cpf.Should().Be(all["50090002"].Cpf);
-        (await db.ManagementUnits.SingleAsync(m => m.Code == "USGA999")).Name.Should().Be("USGA999");
+        (await db.ManagementUnits.AnyAsync(m => m.Code == "USGA999")).Should().BeFalse("a importação não cria gerências");
+        (await db.ManagementUnits.SingleAsync(m => m.Id == all["50090006"].ManagementUnitId)).Code.Should().Be("USGA010");
 
         // A auditoria registra os campos alterados (CPF sempre mascarado como [redacted]).
         var audit = await db.AuditLogs.Where(a => a.Entity == "Employee" && a.EntityId == all["50090001"].Id.ToString() && a.Action == "Updated").ToListAsync();
@@ -379,56 +381,11 @@ public class EmployeeImportTests : IntegrationTestBase
         batch.AppliedByName.Should().Be("Administrador do Sistema");
     }
 
-    [Fact]
-    public async Task SixThousandRowsWith72Columns_PreviewAndConfirmEachUnder15Seconds()
-    {
-        using var admin = await AdminAsync();
-        // 21 colunas de base + 51 extras = 72 colunas.
-        var builder = new HrXlsxBuilder(extraColumns: 51);
-        for (var i = 0; i < 6000; i++)
-        {
-            var mu = new[] { "USGA131", "USGA132", "USGA133", "USGA134", "USGA135", "USGA136", "USGA137", "USGA138", "USGA141" }[i % 9];
-            builder.Add(new R((51000000 + i).ToString(), $"Pessoa Sintética {i:0000}", HrXlsxBuilder.Cpf(1000 + i),
-                Status: i % 50 == 0 ? "Afastado" : "Ativo", JobCode: $"5000{i % 40:0000}", JobName: $"Cargo {i % 40}",
-                DeptCode: $"6000{i % 120:0000}", DeptName: $"Setor {i % 120}", ManagementUnit: mu, Group: i % 2 == 0 ? "Campo" : "Indústria",
-                Team: $"T{i % 6}"));
-        }
-        var file = builder.Build();
-        _output.WriteLine($"Arquivo sintético: {file.Length / 1024} KB, 6000 linhas x 72 colunas");
-
-        var watch = Stopwatch.StartNew();
-        var preview = await PreviewAsync(admin, file);
-        var previewTime = watch.Elapsed;
-        preview.Summary.Created.Should().Be(6000);
-        preview.Errors.Should().BeEmpty();
-
-        watch.Restart();
-        var confirm = await ConfirmAsync(admin, preview.BatchId, file);
-        var confirmTime = watch.Elapsed;
-        confirm.StatusCode.Should().Be(HttpStatusCode.OK, await confirm.Content.ReadAsStringAsync());
-
-        // Segunda importação (tudo sem mudança): também precisa ser rápida.
-        watch.Restart();
-        var again = await PreviewAsync(admin, file);
-        var secondPreviewTime = watch.Elapsed;
-        again.Summary.Unchanged.Should().Be(6000);
-
-        _output.WriteLine($"Pré-visualização (6000 novos): {previewTime.TotalSeconds:0.00} s");
-        _output.WriteLine($"Confirmação (6000 criações): {confirmTime.TotalSeconds:0.00} s");
-        _output.WriteLine($"Pré-visualização (6000 sem mudança): {secondPreviewTime.TotalSeconds:0.00} s");
-        File.WriteAllText(Path.Combine(Path.GetTempPath(), "sigh-import-timings.txt"),
-            $"preview={previewTime.TotalSeconds:0.00};confirm={confirmTime.TotalSeconds:0.00};preview2={secondPreviewTime.TotalSeconds:0.00}");
-
-        previewTime.Should().BeLessThan(TimeSpan.FromSeconds(15));
-        confirmTime.Should().BeLessThan(TimeSpan.FromSeconds(15));
-        secondPreviewTime.Should().BeLessThan(TimeSpan.FromSeconds(15));
-    }
-
     // ---- helpers ----
 
     private Task<HttpClient> AdminAsync() => AdminAsync(Factory);
 
-    private static async Task<HttpClient> AdminAsync(WebApplicationFactory<Program> host)
+    internal static async Task<HttpClient> AdminAsync(WebApplicationFactory<Program> host)
     {
         var client = host.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
         client.Timeout = TimeSpan.FromMinutes(2);
@@ -447,14 +404,14 @@ public class EmployeeImportTests : IntegrationTestBase
         return await client.PostAsync(url, form);
     }
 
-    private static async Task<EmployeeImportPreviewDto> PreviewAsync(HttpClient client, byte[] file)
+    internal static async Task<EmployeeImportPreviewDto> PreviewAsync(HttpClient client, byte[] file)
     {
         var response = await PostFileAsync(client, "/api/v1/employees/import/preview", file);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return (await response.Content.ReadFromJsonAsync<Result<EmployeeImportPreviewDto>>())!.Data!;
     }
 
-    private static Task<HttpResponseMessage> ConfirmAsync(HttpClient client, Guid batchId, byte[] file, bool confirmMassTermination = false) =>
+    internal static Task<HttpResponseMessage> ConfirmAsync(HttpClient client, Guid batchId, byte[] file, bool confirmMassTermination = false) =>
         PostFileAsync(client, $"/api/v1/employees/import/{batchId}/confirm", file, confirmMassTermination);
 
     private static async Task ImportAsync(HttpClient client, byte[] file)

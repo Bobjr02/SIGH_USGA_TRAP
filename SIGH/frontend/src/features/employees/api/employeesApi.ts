@@ -162,7 +162,6 @@ export interface ImportPreview {
   unchanged: string[];
   errors: ImportIssue[];
   warnings: ImportIssue[];
-  newManagementUnits: string[];
   activeBefore: number;
   absenceTerminationPercent: number;
   maxTerminationPercent: number;
@@ -174,6 +173,8 @@ export interface ImportPreview {
   otherCompanyRows?: number;
   /** Mais da metade das linhas é de outra empresa (alerta grande; confirmação bloqueada). */
   looksLikeOtherCompany?: boolean;
+  /** Linhas de autônomos (ex.: TRAPAUT) ignoradas: não entram, não são erro nem contam para o alerta de outra empresa. */
+  ignoredRows?: number;
 }
 
 export interface ImportResult {

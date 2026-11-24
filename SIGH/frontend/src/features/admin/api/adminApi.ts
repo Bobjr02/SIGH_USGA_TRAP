@@ -1,5 +1,6 @@
 import { api } from '../../../services/api';
 import { LABELS } from '../../../i18n/labels';
+import { sortByManagementUnitCode } from '../../../utils/managementUnits';
 
 interface Result<T> {
   success: boolean;
@@ -222,7 +223,7 @@ export const adminApi = {
 
   async units(): Promise<ManagementUnit[]> {
     const response = await api.get<Result<ManagementUnit[]>>('/v1/management-units');
-    return unwrap(response.data, 'Erro ao carregar as gerências.');
+    return sortByManagementUnitCode(unwrap(response.data, 'Erro ao carregar as gerências.'));
   },
 
   async renameUnit(id: string, name: string): Promise<ManagementUnit> {

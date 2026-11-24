@@ -214,7 +214,7 @@ public sealed class UserAccessAdministrationService : IUserAccessAdministrationS
             units
                 .Select(u => new UserManagementUnitDto(u.Id, u.ManagementUnitId, u.Code, u.Name, u.ValidFrom, u.ValidUntil,
                     UserAccessRules.StateAt(new Validity(u.ValidFrom, u.ValidUntil), now), u.CompanyId, u.CompanyName))
-                .OrderBy(u => u.Code, StringComparer.Ordinal)
+                .OrderBy(u => u.Code, SIGH.Domain.Employees.ManagementUnitCodes.Comparer)
                 .ToList(),
             elsewhere);
     }
@@ -430,12 +430,15 @@ public sealed class ManagementUnitAdministrationService : IManagementUnitAdminis
     public async Task<IReadOnlyList<ManagementUnitDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var companyIds = (await _companies.GetRequestGrantsAsync(cancellationToken)).Select(g => g.CompanyId).ToList();
-        return await _db.ManagementUnits.AsNoTracking()
+        var units = await _db.ManagementUnits.AsNoTracking()
             .Where(m => companyIds.Contains(m.CompanyId))
             .Join(_db.Companies, m => m.CompanyId, c => c.Id, (m, c) => new { m, c })
-            .OrderBy(x => x.c.Code).ThenBy(x => x.m.Code)
-            .Select(x => new ManagementUnitDto(x.m.Id, x.m.Code, x.m.Name, x.m.IsActive, x.c.Id, x.c.Name))
+            .Select(x => new { CompanyCode = x.c.Code, Dto = new ManagementUnitDto(x.m.Id, x.m.Code, x.m.Name, x.m.IsActive, x.c.Id, x.c.Name) })
             .ToListAsync(cancellationToken);
+        // Por empresa; dentro dela, a chave sem sufixo primeiro e depois os números (USGA, USGA010, USGA131…).
+        return units.OrderBy(x => x.CompanyCode, StringComparer.Ordinal)
+            .ThenBy(x => x.Dto.Code, SIGH.Domain.Employees.ManagementUnitCodes.Comparer)
+            .Select(x => x.Dto).ToList();
     }
 
     public async Task<ManagementUnitDto> RenameAsync(Guid id, RenameManagementUnitRequest request, CancellationToken cancellationToken = default)

@@ -197,7 +197,6 @@ describe('/employees/import', () => {
     unchanged: ['50090005'],
     errors: [{ row: 7, employeeNumber: '50090009', severity: 'Error', message: 'Situação "Aposentado" desconhecida.' }],
     warnings: [{ row: 8, employeeNumber: '50090007', severity: 'Warning', message: 'Possível readmissão: o CPF já pertence à matrícula desligada 50090002.' }],
-    newManagementUnits: [],
     activeBefore: 4,
     absenceTerminationPercent: 25,
     maxTerminationPercent: 10,
@@ -253,6 +252,25 @@ describe('/employees/import', () => {
     await waitFor(() => expect(confirm).toHaveBeenCalledWith('batch-1', expect.any(File), true));
     expect(await screen.findByText(/Importação aplicada: 1 novo,/)).toBeInTheDocument();
     expect(screen.getByRole('listitem', { name: 'Passo 3: Confirmar importação (concluído)' })).toBeInTheDocument();
+  });
+
+  it.each([
+    [0, null],
+    [1, '1 linha de autônomos ignorada'],
+    [2, '2 linhas de autônomos ignoradas'],
+  ])('shows the autonomous (TRAPAUT) rows ignored: %i → %s', async (ignoredRows, text) => {
+    vi.spyOn(employeesApi, 'previewImport').mockResolvedValue({ ...preview, requiresMassTerminationConfirmation: false, ignoredRows });
+    server.use(refreshSucceeds(), importUser(), batches());
+    const user = userEvent.setup();
+
+    renderApp('/employees/import');
+    await user.upload(await screen.findByLabelText('Planilha do SAP'), xlsx());
+    await user.click(screen.getByRole('button', { name: 'Pré-visualizar' }));
+    await screen.findByRole('tab', { name: 'Erros (1)' });
+
+    if (text) expect(screen.getByTestId('ignored-rows')).toHaveTextContent(new RegExp(`^${text}$`));
+    else expect(screen.queryByTestId('ignored-rows')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Erros (1)' })).toBeInTheDocument();
   });
 
   it('shows file-level warnings (missing optional column) at the top of the preview', async () => {

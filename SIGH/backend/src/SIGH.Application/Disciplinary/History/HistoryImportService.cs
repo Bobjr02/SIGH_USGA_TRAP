@@ -389,11 +389,11 @@ public sealed class HistoryImportService : IHistoryImportService
         var employees = await _db.Employees.AsNoTracking().Where(e => e.CompanyId == companyId)
             .Select(e => new HistoryEmployeeRef(e.Id, e.EmployeeNumber, e.FullName, e.ManagementUnitId))
             .ToListAsync(cancellationToken);
-        var allUnits = await _db.ManagementUnits.AsNoTracking().Select(m => new { m.CompanyId, Unit = new HistoryUnitRef(m.Id, m.Code, m.Name) }).ToListAsync(cancellationToken);
+        var allUnits = await _db.ManagementUnits.AsNoTracking().Select(m => new { m.CompanyId, Unit = new HistoryUnitRef(m.Id, m.Code, m.Name, m.IsActive) }).ToListAsync(cancellationToken);
         var units = allUnits.Where(u => u.CompanyId == companyId).Select(u => u.Unit).ToList();
-        var ownKeys = units.SelectMany(u => new[] { HistoryKeys.Normalize(u.Name), HistoryKeys.Normalize(u.Code) }).ToHashSet(StringComparer.Ordinal);
-        var otherKeys = allUnits.Where(u => u.CompanyId != companyId)
-            .SelectMany(u => new[] { HistoryKeys.Normalize(u.Unit.Name), HistoryKeys.Normalize(u.Unit.Code) })
+        var ownKeys = units.SelectMany(u => HistoryImportPlanner.UnitKeys(u.Code, u.Name)).ToHashSet(StringComparer.Ordinal);
+        var otherKeys = allUnits.Where(u => u.CompanyId != companyId && u.Unit.IsActive)
+            .SelectMany(u => HistoryImportPlanner.UnitKeys(u.Unit.Code, u.Unit.Name))
             .Where(k => k.Length > 0 && !ownKeys.Contains(k))
             .ToHashSet(StringComparer.Ordinal);
         var infractions = await _db.InfractionTypes.AsNoTracking().Where(i => i.CompanyId == companyId).Select(i => new HistoryInfractionRef(i.Id, i.Name)).ToListAsync(cancellationToken);

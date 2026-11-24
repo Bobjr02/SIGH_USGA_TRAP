@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
-export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.com.br';
+export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.test';
 /**
  * Senha que o admin semeado define pelo link do e-mail (auth-flow.spec). Ninguém conhece a senha antes: o seed cria a
  * conta sem senha utilizável e manda o link de definição.

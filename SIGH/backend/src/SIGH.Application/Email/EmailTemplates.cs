@@ -13,6 +13,7 @@ public static class EmailTemplates
     public const string PasswordResetTemplate = "PasswordReset";
     public const string AccountCreatedTemplate = "AccountCreated";
     public const string AdministratorAccessTemplate = "AdministratorAccess";
+    public const string AdministratorRecoveredNoticeTemplate = "AdministratorRecoveredNotice";
     public const string DeadlineAlertTemplate = "DeadlineAlert";
     public const string RecordNoticeTemplate = "RecordNotice";
 
@@ -117,6 +118,35 @@ public static class EmailTemplates
             "Se você não esperava este e-mail, avise o TI.</p>");
 
         return new EmailContent(AdministratorAccessTemplate, subject, html, text);
+    }
+
+    /// <summary>
+    /// Aviso aos administradores vigentes da empresa: o TI concedeu o perfil Administrador a outra pessoa pela linha de
+    /// comando do servidor (admin-recover). Diz quem recebeu e quando; não traz link nem senha.
+    /// </summary>
+    public static EmailContent AdministratorRecoveredNotice(string fullName, string companyName, string grantedName, string grantedEmail, DateTimeOffset grantedAt)
+    {
+        var subject = $"Novo administrador no SIGH - {companyName}";
+        var when = TimeZoneInfo.ConvertTime(grantedAt, Brasilia).ToString("dd/MM/yyyy 'às' HH:mm", PtBr);
+
+        var text = new StringBuilder()
+            .AppendLine($"Olá, {fullName}.")
+            .AppendLine()
+            .AppendLine($"Um novo administrador foi concedido na empresa {companyName} pela linha de comando do servidor (recuperação de administrador pelo TI).")
+            .AppendLine($"Quem recebeu: {grantedName} ({grantedEmail})")
+            .AppendLine($"Quando: {when} (horário de Brasília)")
+            .AppendLine()
+            .AppendLine("Você recebe este aviso porque é administrador desta empresa. Se você não esperava esta concessão, avise o TI.")
+            .ToString();
+
+        var html = Layout(subject,
+            $"<p>Olá, {E(fullName)}.</p>" +
+            $"<p>Um novo administrador foi concedido na empresa <strong>{E(companyName)}</strong> pela linha de comando do servidor (recuperação de administrador pelo TI).</p>" +
+            $"<p>Quem recebeu: <strong>{E(grantedName)}</strong> ({E(grantedEmail)})<br>" +
+            $"Quando: <strong>{E(when)}</strong> (horário de Brasília)</p>" +
+            "<p>Você recebe este aviso porque é administrador desta empresa. Se você não esperava esta concessão, avise o TI.</p>");
+
+        return new EmailContent(AdministratorRecoveredNoticeTemplate, subject, html, text);
     }
 
     public static EmailContent DeadlineAlert(string fullName, string title, string message, DateTimeOffset? dueDate, string link)
