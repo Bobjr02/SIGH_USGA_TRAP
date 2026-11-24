@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using SIGH.Application.Employees.Common;
+using SIGH.Domain.Employees;
 using SIGH.Domain.Employees.Enums;
 
 namespace SIGH.Application.Employees.Import;
@@ -23,7 +25,8 @@ public sealed record EmployeeSnapshot(
 public sealed record ReferenceSnapshot(
     IReadOnlyDictionary<string, string> JobTitles,          // código → descrição
     IReadOnlyDictionary<string, string> Departments,        // código → descrição
-    IReadOnlySet<string> ManagementUnits);                  // códigos
+    IReadOnlySet<string> ManagementUnits,                   // códigos das gerências ATIVAS da empresa
+    IReadOnlySet<string>? InactiveManagementUnits = null);  // códigos das gerências inativas
 
 public enum EmployeeChangeKind
 {
@@ -53,16 +56,17 @@ public sealed record EmployeeImportPlan(
     IReadOnlyList<(string Code, string Name)> RenamedJobTitles,
     IReadOnlyList<(string Code, string Name, string ManagementUnitCode)> NewDepartments,
     IReadOnlyList<(string Code, string Name)> RenamedDepartments,
-    IReadOnlyList<string> NewManagementUnits,
     int ActiveBefore,
     double AbsenceTerminationPercent,
     bool RequiresMassTerminationConfirmation,
     string Fingerprint,
     /// <summary>Linhas rejeitadas porque a Chave Organização é de outra empresa.</summary>
-    int OtherCompanyRows = 0)
+    int OtherCompanyRows = 0,
+    /// <summary>Linhas de autônomos (Import:IgnoredManagementUnitCodes): ignoradas, sem erro nem alerta de outra empresa.</summary>
+    int IgnoredRows = 0)
 {
-    /// <summary>Mais da metade das linhas é de outra empresa: o arquivo parece ser de outra empresa.</summary>
-    public bool LooksLikeOtherCompany => TotalRows > 0 && OtherCompanyRows * 2 > TotalRows;
+    /// <summary>Mais da metade das linhas (fora as ignoradas) é de outra empresa: o arquivo parece ser de outra empresa.</summary>
+    public bool LooksLikeOtherCompany => TotalRows - IgnoredRows > 0 && OtherCompanyRows * 2 > TotalRows - IgnoredRows;
 
     public IEnumerable<PlannedChange> Of(EmployeeChangeKind kind) => Changes.Where(c => c.Kind == kind);
     public int ErrorCount => Issues.Count(i => i.Severity == HrIssueSeverity.Error);
@@ -85,6 +89,18 @@ public static class EmployeeImportPlanner
     /// <summary>Linha cuja Chave Organização não tem o prefixo da empresa ativa.</summary>
     public const string OtherCompanyMessage = "gerência de outra empresa — confira se o arquivo é desta empresa";
 
+    /// <summary>Chave com o prefixo da empresa, mas fora dos dois formatos (USGA ou USGA + 3 dígitos).</summary>
+    public static string InvalidFormatMessage(string code, string prefix) =>
+        $"Chave Organização \"{code}\" fora do formato: use {ManagementUnitCodes.FormatHint(prefix)}.";
+
+    /// <summary>Chave no formato certo, mas que não está na lista oficial de gerências da empresa.</summary>
+    public static string NotOfficialMessage(string code) =>
+        $"Chave Organização {code} não está na lista oficial de gerências desta empresa: a linha não foi importada. Confira a chave no SAP.";
+
+    /// <summary>Chave da lista oficial, mas desativada no SIGH.</summary>
+    public static string InactiveMessage(string code) =>
+        $"Chave Organização {code} está inativa no SIGH: a linha não foi importada.";
+
     public static EmployeeImportPlan Plan(
         IReadOnlyList<HrRawRow> rawRows,
         IReadOnlyList<string> sheetWarnings,
@@ -92,25 +108,33 @@ public static class EmployeeImportPlanner
         ReferenceSnapshot references,
         DateOnly importDate,
         double maxTerminationPercent,
-        string? managementUnitPrefix = null)
+        string? managementUnitPrefix = null,
+        IReadOnlySet<string>? ignoredManagementUnitCodes = null)
     {
         var issues = sheetWarnings.Select(w => new HrImportIssue(null, null, HrIssueSeverity.Warning, w)).ToList();
         var otherCompanyRows = 0;
+        var ignoredRows = 0;
 
         // 1. Validação por linha.
         var rows = new List<HrRow>();
         var presentNumbers = new HashSet<string>(StringComparer.Ordinal);
         foreach (var raw in rawRows)
         {
-            var row = HrRowValidator.Validate(raw, issues);
-            // Chave Organização de outra empresa: linha rejeitada (e a matrícula não conta como ausente).
-            if (row is not null && !string.IsNullOrEmpty(managementUnitPrefix)
-                && !row.ManagementUnitCode.StartsWith(managementUnitPrefix, StringComparison.OrdinalIgnoreCase))
+            // Autônomos (ex.: TRAPAUT) não fazem parte do SIGH: a linha é ignorada antes de qualquer validação.
+            if (ignoredManagementUnitCodes is { Count: > 0 }
+                && ignoredManagementUnitCodes.Contains(raw.Get(HrField.ManagementUnitCode).Text.Trim()))
             {
-                issues.Add(new HrImportIssue(row.RowNumber, row.EmployeeNumber, HrIssueSeverity.Error,
-                    $"Chave Organização {row.ManagementUnitCode}: {OtherCompanyMessage}."));
+                ignoredRows++;
+                continue;
+            }
+
+            var row = HrRowValidator.Validate(raw, issues);
+            if (row is not null && ManagementUnitProblem(row.ManagementUnitCode, managementUnitPrefix, references) is { } problem)
+            {
+                // Linha rejeitada pela Chave Organização (a matrícula não conta como ausente).
+                issues.Add(new HrImportIssue(row.RowNumber, row.EmployeeNumber, HrIssueSeverity.Error, problem.Message));
                 presentNumbers.Add(row.EmployeeNumber);
-                otherCompanyRows++;
+                if (problem.OtherCompany) otherCompanyRows++;
                 continue;
             }
             if (row is not null) rows.Add(row);
@@ -193,7 +217,6 @@ public static class EmployeeImportPlanner
         var renamedJobs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var newDepts = new Dictionary<string, (string Name, string Mu)>(StringComparer.OrdinalIgnoreCase);
         var renamedDepts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var newMus = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         // Toda linha aceita está em "changes" ou em "unchanged".
         foreach (var row in rows)
         {
@@ -202,10 +225,6 @@ public static class EmployeeImportPlanner
 
             if (!references.Departments.TryGetValue(row.DepartmentCode, out var deptName)) newDepts.TryAdd(row.DepartmentCode, (row.DepartmentName, row.ManagementUnitCode));
             else if (deptName != row.DepartmentName) renamedDepts.TryAdd(row.DepartmentCode, row.DepartmentName);
-
-            if (!references.ManagementUnits.Contains(row.ManagementUnitCode) && newMus.Add(row.ManagementUnitCode))
-                issues.Add(new HrImportIssue(row.RowNumber, row.EmployeeNumber, HrIssueSeverity.Warning,
-                    $"Chave Organização {row.ManagementUnitCode} desconhecida: a gerência será criada com o próprio código como nome."));
         }
 
         // 7. Proteção contra desligamento em massa.
@@ -223,10 +242,33 @@ public static class EmployeeImportPlanner
             renamedJobs.Select(kv => (kv.Key, kv.Value)).ToList(),
             newDepts.Select(kv => (kv.Key, kv.Value.Name, kv.Value.Mu)).ToList(),
             renamedDepts.Select(kv => (kv.Key, kv.Value)).ToList(),
-            newMus.ToList(),
             activeBefore, Math.Round(percent, 2), requiresConfirmation,
             Fingerprint(ordered, unchanged, sortedIssues),
-            otherCompanyRows);
+            otherCompanyRows,
+            ignoredRows);
+    }
+
+    /// <summary>
+    /// Por que a Chave Organização da linha não é aceita (null se é aceita). Com o prefixo da empresa: outro prefixo é
+    /// "outra empresa" (conta para o alerta do arquivo); com o prefixo, mas fora dos dois formatos, fora da lista oficial
+    /// ou inativa, é erro da linha. A chave precisa ser de uma gerência ATIVA da empresa: a importação não cria gerências.
+    /// </summary>
+    private static (string Message, bool OtherCompany)? ManagementUnitProblem(string code, string? prefix, ReferenceSnapshot references)
+    {
+        if (!string.IsNullOrEmpty(prefix))
+        {
+            if (!code.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return ($"Chave Organização {code}: {OtherCompanyMessage}.", true);
+            if (!ManagementUnitCodes.IsValid(code, prefix))
+                return (InvalidFormatMessage(code, prefix), false);
+            if (!OfficialManagementUnits.Contains(code))
+                return (NotOfficialMessage(code), false);
+        }
+        if (references.ManagementUnits.Contains(code))
+            return null;
+        return references.InactiveManagementUnits?.Contains(code) == true
+            ? (InactiveMessage(code), false)
+            : (NotOfficialMessage(code), false);
     }
 
     /// <summary>

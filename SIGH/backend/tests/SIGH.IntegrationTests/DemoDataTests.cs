@@ -64,7 +64,7 @@ public class DemoDataTests : IntegrationTestBase
             .AddConfiguration(Factory.Services.GetRequiredService<IConfiguration>())
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Seed:AdminEmail"] = "admin@sigh.com.br",
+                ["Seed:AdminEmail"] = "admin@sigh.test",
                 ["Seed:CompanyAdmins:0:CompanyCode"] = "USGA",
                 ["Seed:CompanyAdmins:0:Email"] = CustomWebApplicationFactory.SeedAdminEmail,
                 ["Seed:CompanyAdmins:0:Name"] = "Administrador do Sistema",
@@ -110,10 +110,17 @@ public class DemoDataTests : IntegrationTestBase
         var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
         var usga = SIGH.Persistence.Seeds.DatabaseSeeder.DefaultCompanyId;
         var trap = SIGH.Persistence.Seeds.DatabaseSeeder.TrapicheCompanyId;
-        (await db.Employees.CountAsync(e => e.CompanyId == usga)).Should().Be(40);
+        (await db.Employees.CountAsync(e => e.CompanyId == usga)).Should().Be(40 + UsgaDemoSpreadsheet.ExtraEmployees.Count, "a carga do pacote e os 3 fictícios em USGA, USGA010 e USGA161");
+        (await db.Employees.Where(e => e.CompanyId == usga).Join(db.ManagementUnits, e => e.ManagementUnitId, m => m.Id, (e, m) => m.Code).Distinct().ToListAsync())
+            .Should().Contain(["USGA", "USGA010", "USGA161"]);
         (await db.Employees.CountAsync(e => e.CompanyId == trap)).Should().Be(TrapicheDemoSpreadsheets.Employees.Count);
         (await db.Employees.Where(e => e.CompanyId == trap).AllAsync(e => e.FullName.EndsWith("TESTE"))).Should().BeTrue();
-        (await db.ManagementUnits.Where(m => m.CompanyId == trap).Select(m => m.Code).OrderBy(c => c).ToListAsync()).Should().Equal("TRAP131", "TRAP132");
+        (await db.Employees.Where(e => e.CompanyId == trap).Join(db.ManagementUnits, e => e.ManagementUnitId, m => m.Id, (e, m) => m.Code).Distinct().ToListAsync())
+            .Should().BeEquivalentTo(["TRAP", "TRAP180", "TRAP220", "TRAP230"], "a demonstração cobre os dois formatos de chave");
+        var autonomous = TrapicheDemoSpreadsheets.Autonomous.Select(a => a.Number).ToList();
+        (await db.Employees.AnyAsync(e => autonomous.Contains(e.EmployeeNumber)))
+            .Should().BeFalse("as linhas de autônomos (TRAPAUT) são ignoradas");
+        (await db.ManagementUnits.AnyAsync(m => m.Code == TrapicheDemoSpreadsheets.AutonomousUnit)).Should().BeFalse();
         (await db.EmployeeImportBatches.CountAsync()).Should().Be(2, "uma carga por empresa, pelo importador, uma vez só");
         var demoUsers = await db.Users.Where(u => u.Email.EndsWith("@demo.local")).ToListAsync();
         demoUsers.Should().HaveCount(DemoDataSeeder.Users.Count + 1, "os usuários de demonstração e o admin.trap")
@@ -154,11 +161,11 @@ public class DemoDataTests : IntegrationTestBase
         seen.Should().NotBeEmpty().And.OnlyContain(r => r.ManagementUnitCode == "USGA131");
         seen.Should().Contain(r => r.Origin == RecordOrigin.Historical, "o gestor vê o histórico da gerência dele");
 
-        // O gestor da TRAP131 vê só a TRAP131; o jurídico, no modo "Todas", vê as duas empresas.
+        // O gestor da TRAP220 vê só a TRAP220; o jurídico, no modo "Todas", vê as duas empresas.
         var trapManager = Factory.CreateClient();
-        trapManager.DefaultRequestHeaders.Authorization = new("Bearer", (await AuthTestHelpers.LoginAsync(trapManager, "gestor.trap131@demo.local", DemoPassword)).Body.AccessToken);
+        trapManager.DefaultRequestHeaders.Authorization = new("Bearer", (await AuthTestHelpers.LoginAsync(trapManager, "gestor.trap220@demo.local", DemoPassword)).Body.AccessToken);
         var trapSeen = (await trapManager.GetFromJsonAsync<Result<PagedResult<RecordSummaryDto>>>("/api/v1/disciplinary-records?pageSize=50"))!.Data!.Items;
-        trapSeen.Should().NotBeEmpty().And.OnlyContain(r => r.ManagementUnitCode == "TRAP131" && r.CompanyCode == "TRAP");
+        trapSeen.Should().NotBeEmpty().And.OnlyContain(r => r.ManagementUnitCode == "TRAP220" && r.CompanyCode == "TRAP");
 
         var legal = Factory.CreateClient();
         legal.DefaultRequestHeaders.Authorization = new("Bearer", (await AuthTestHelpers.LoginAsync(legal, "juridico@demo.local", DemoPassword)).Body.AccessToken);

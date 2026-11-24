@@ -11,7 +11,7 @@
 - `INFRAÇÃO` = "ADVERTÊNCIA" → advertência escrita (WrittenWarning). Se `TIPO DA INFRAÇÃO` contiver "VERBAL", advertência verbal.
 - `INFRAÇÃO` = "SUSPENSÃO" → suspensão. O "1" de "SUSPENSÃO 1" é só rótulo.
 - `INFRAÇÃO` ou `TIPO DA INFRAÇÃO` contendo "JUSTA CAUSA" → demissão por justa causa (JustCauseTermination).
-- `GERÊNCIA`: nome comparado (sem acento e sem diferença de maiúsculas) com os nomes das 9 gerências do SIGH. Vira a gerência da época do registro.
+- `GERÊNCIA`: comparada (sem acento e sem diferença de maiúsculas) com a Chave Organização e o nome das gerências ativas da empresa, com ou sem o "Gerência"/"Gerência de" do nome oficial ("MANUTENÇÃO" = Gerência de Manutenção), e com os nomes antigos das planilhas ("AGRÍCOLA URBANO" = USGA137). Vira a gerência da época do registro. Chave da empresa fora do formato, fora da lista oficial ou inativa: linha rejeitada.
 - `MOTIVO DA INFRAÇÃO` → tipo de infração, pelo nome normalizado. Motivo inexistente no SIGH é listado na pré-visualização e criado na confirmação.
 - Período da suspensão, em ordem de prioridade:
   1. `PERÍODO DA SUSPENSÃO`, aceitando "À", "à", "A", "a" ou "até" entre as datas;
@@ -32,7 +32,7 @@
 | 8 | 50090003 | Advertência com `DIAS DE SUSPENSÃO` = 1 | Importada como advertência; **aviso**; os dias são ignorados |
 | 9 | 50090008 | Suspensão sem período, com DATA FIM | Importada; período 12/01/2026 a 14/01/2026, vindo de DATA e DATA FIM |
 | 10 | 50090009 | Motivo "USO DE CELULAR EM SERVIÇO" (não existe) | Pré-visualização lista o motivo novo; na confirmação ele é criado e a linha importada |
-| 11 | 50090012 | `GERÊNCIA` = MANUTENÇÃO, mas o funcionário está hoje na USGA131 (Industrial) | Importada; **aviso**; gerência da época = USGA132 |
+| 11 | 50090012 | `GERÊNCIA` = MANUTENÇÃO, mas o funcionário está hoje na USGA131 (Gerência Industrial) | Importada; **aviso**; gerência da época = USGA132 |
 | 12 | 59990001 | Matrícula inexistente no SIGH | **Rejeitada**: "funcionário não encontrado — importe a base completa do SAP antes" |
 | 13 | 50090007 | Cópia exata da linha 2 | **Rejeitada** como duplicada dentro do arquivo |
 | 14 | 50090011 | Demissão por justa causa | Importada como justa causa |

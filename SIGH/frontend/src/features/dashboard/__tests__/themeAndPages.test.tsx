@@ -55,11 +55,11 @@ describe('login', () => {
     );
     renderApp('/login');
     const user = userEvent.setup();
-    await user.type(await screen.findByLabelText('E-mail'), 'maria@sigh.com.br');
+    await user.type(await screen.findByLabelText('E-mail'), 'maria@sigh.test');
     await user.type(screen.getByLabelText('Senha', { exact: true }), 'x');
     await user.click(screen.getByRole('checkbox', { name: 'Lembrar-me' }));
     await user.click(screen.getByRole('button', { name: /entrar/i }));
-    await waitFor(() => expect(body).toEqual({ email: 'maria@sigh.com.br', password: 'x', rememberMe: true }));
+    await waitFor(() => expect(body).toEqual({ email: 'maria@sigh.test', password: 'x', rememberMe: true }));
   });
 });
 

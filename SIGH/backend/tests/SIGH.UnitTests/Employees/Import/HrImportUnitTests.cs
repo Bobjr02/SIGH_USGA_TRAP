@@ -38,7 +38,7 @@ public class HrRowValidatorTests
             [HrField.JobTitleName] = new("Operador", false),
             [HrField.DepartmentCode] = new("60001000", false),
             [HrField.DepartmentName] = new("Moagem", false),
-            [HrField.ManagementUnitCode] = new("usga131", false),
+            [HrField.ManagementUnitCode] = new("USGA131", false),
         };
         foreach (var (field, text, number) in cells) defaults[field] = new HrCell(text, number);
         return new HrRawRow(7, defaults);

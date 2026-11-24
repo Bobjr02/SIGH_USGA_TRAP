@@ -7,29 +7,50 @@ namespace SIGH.Demo;
 
 /// <summary>
 /// Planilhas FICTÍCIAS da Trapiche, geradas por código (nada é versionado): a exportação do SAP e a planilha de
-/// penalidades, no mesmo formato das da USGA. As Chaves Organização são TRAP131 e TRAP132 (os códigos reais da
-/// Trapiche ainda não existem) e todos os nomes terminam com "TESTE".
+/// penalidades, no mesmo formato das da USGA. As Chaves Organização são da lista oficial, nos dois formatos: TRAP220
+/// (Gerência Administrativa) e TRAP230 (Gerência Industrial), com 6 funcionários cada, TRAP (Trapiche Recife) e
+/// TRAP180 (Diretoria). A exportação traz também 2 linhas de autônomos (TRAPAUT), que a importação ignora. Todos os
+/// nomes terminam com "TESTE".
 /// </summary>
 public static class TrapicheDemoSpreadsheets
 {
     public sealed record DemoEmployee(string Number, string Name, string Cpf, string Unit, string Group, string JobCode, string JobName, string DeptCode, string DeptName, string Admission);
 
+    /// <summary>Chave Organização dos autônomos na exportação do SAP da Trapiche (ignorada pela importação).</summary>
+    public const string AutonomousUnit = "TRAPAUT";
+
     /// <summary>Funcionários fictícios da Trapiche (matrículas 7009xxxx).</summary>
     public static readonly IReadOnlyList<DemoEmployee> Employees =
     [
-        new("70090001", "JOAO DA SILVA TESTE", Cpf("700900001"), "TRAP131", "Indústria", "70001001", "Operador de Caldeira", "71001000", "Caldeiraria", "03/02/2020"),
-        new("70090002", "MARIA DE SOUZA TESTE", Cpf("700900002"), "TRAP131", "Indústria", "70001002", "Operador de Moenda", "71002000", "Moagem", "10/03/2021"),
-        new("70090003", "JOSE PEREIRA TESTE", Cpf("700900003"), "TRAP131", "Indústria", "70001003", "Eletricista", "71003000", "Manutenção Elétrica", "15/06/2019"),
-        new("70090004", "ANA LIMA TESTE", Cpf("700900004"), "TRAP131", "Indústria", "70001001", "Operador de Caldeira", "71001000", "Caldeiraria", "01/08/2022"),
-        new("70090005", "PEDRO ALVES TESTE", Cpf("700900005"), "TRAP131", "Indústria", "70001004", "Mecânico", "71004000", "Oficina", "20/01/2018"),
-        new("70090006", "LUCIA FERREIRA TESTE", Cpf("700900006"), "TRAP131", "Indústria", "70001002", "Operador de Moenda", "71002000", "Moagem", "05/05/2023"),
-        new("70090007", "CARLOS SANTOS TESTE", Cpf("700900007"), "TRAP132", "Campo", "70002001", "Trabalhador Rural", "72001000", "Corte de Cana", "12/02/2020"),
-        new("70090008", "FRANCISCA ROCHA TESTE", Cpf("700900008"), "TRAP132", "Campo", "70002001", "Trabalhador Rural", "72001000", "Corte de Cana", "18/07/2021"),
-        new("70090009", "ANTONIO GOMES TESTE", Cpf("700900009"), "TRAP132", "Campo", "70002002", "Tratorista", "72002000", "Mecanização Agrícola", "30/09/2019"),
-        new("70090010", "RAIMUNDA COSTA TESTE", Cpf("700900010"), "TRAP132", "Campo", "70002001", "Trabalhador Rural", "72001000", "Corte de Cana", "04/04/2022"),
-        new("70090011", "SEBASTIAO RIBEIRO TESTE", Cpf("700900011"), "TRAP132", "Campo", "70002003", "Motorista Canavieiro", "72003000", "Transporte", "22/11/2017"),
-        new("70090012", "TEREZA MARTINS TESTE", Cpf("700900012"), "TRAP132", "Campo", "70002002", "Tratorista", "72002000", "Mecanização Agrícola", "14/03/2024"),
+        // TRAP220 - Gerência Administrativa.
+        new("70090001", "JOAO DA SILVA TESTE", Cpf("700900001"), "TRAP220", "Indústria", "70001101", "Assistente Administrativo", "71101000", "Administração", "03/02/2020"),
+        new("70090002", "MARIA DE SOUZA TESTE", Cpf("700900002"), "TRAP220", "Indústria", "70001102", "Auxiliar de Escritório", "71101000", "Administração", "10/03/2021"),
+        new("70090003", "JOSE PEREIRA TESTE", Cpf("700900003"), "TRAP220", "Indústria", "70001103", "Almoxarife", "71102000", "Almoxarifado", "15/06/2019"),
+        new("70090004", "ANA LIMA TESTE", Cpf("700900004"), "TRAP220", "Indústria", "70001104", "Assistente de Compras", "71103000", "Compras", "01/08/2022"),
+        new("70090005", "PEDRO ALVES TESTE", Cpf("700900005"), "TRAP220", "Indústria", "70001105", "Auxiliar de Almoxarifado", "71102000", "Almoxarifado", "20/01/2018"),
+        new("70090006", "LUCIA FERREIRA TESTE", Cpf("700900006"), "TRAP220", "Indústria", "70001106", "Recepcionista", "71101000", "Administração", "05/05/2023"),
+        // TRAP230 - Gerência Industrial.
+        new("70090007", "CARLOS SANTOS TESTE", Cpf("700900007"), "TRAP230", "Indústria", "70001001", "Operador de Caldeira", "71001000", "Caldeiraria", "12/02/2020"),
+        new("70090008", "FRANCISCA ROCHA TESTE", Cpf("700900008"), "TRAP230", "Indústria", "70001002", "Operador de Moenda", "71002000", "Moagem", "18/07/2021"),
+        new("70090009", "ANTONIO GOMES TESTE", Cpf("700900009"), "TRAP230", "Indústria", "70001003", "Eletricista", "71003000", "Manutenção Elétrica", "30/09/2019"),
+        new("70090010", "RAIMUNDA COSTA TESTE", Cpf("700900010"), "TRAP230", "Indústria", "70001001", "Operador de Caldeira", "71001000", "Caldeiraria", "04/04/2022"),
+        new("70090011", "SEBASTIAO RIBEIRO TESTE", Cpf("700900011"), "TRAP230", "Indústria", "70001004", "Mecânico", "71004000", "Oficina", "22/11/2017"),
+        new("70090012", "TEREZA MARTINS TESTE", Cpf("700900012"), "TRAP230", "Indústria", "70001002", "Operador de Moenda", "71002000", "Moagem", "14/03/2024"),
+        // TRAP - Trapiche Recife (chave sem sufixo) e TRAP180 - Diretoria.
+        new("70090013", "HELENA BARROS TESTE", Cpf("700900013"), "TRAP", "Indústria", "70001201", "Analista de RH", "71201000", "Recursos Humanos", "06/06/2016"),
+        new("70090014", "MARCOS VIEIRA TESTE", Cpf("700900014"), "TRAP", "Indústria", "70001202", "Analista Financeiro", "71202000", "Financeiro", "09/09/2021"),
+        new("70090015", "ROBERTO NUNES TESTE", Cpf("700900015"), "TRAP180", "Indústria", "70001301", "Assessor da Diretoria", "71301000", "Diretoria", "11/11/2014"),
     ];
+
+    /// <summary>Autônomos na exportação do SAP (TRAPAUT): não fazem parte do SIGH e a importação os ignora.</summary>
+    public static readonly IReadOnlyList<DemoEmployee> Autonomous =
+    [
+        new("70090091", "AUTONOMO UM TESTE", Cpf("700900091"), AutonomousUnit, "Campo", "70009001", "Prestador de Serviço", "79001000", "Serviços de Terceiros", "01/03/2025"),
+        new("70090092", "AUTONOMA DOIS TESTE", Cpf("700900092"), AutonomousUnit, "Campo", "70009001", "Prestador de Serviço", "79001000", "Serviços de Terceiros", "15/04/2025"),
+    ];
+
+    /// <summary>Funcionários de cada Chave Organização (para os testes de escopo por gerência).</summary>
+    public static IReadOnlyList<string> NumbersIn(string unit) => Employees.Where(e => e.Unit == unit).Select(e => e.Number).ToList();
 
     private static readonly string[] EmployeeHeaders =
     [
@@ -37,10 +58,13 @@ public static class TrapicheDemoSpreadsheets
         "Data admissão", "Data demissão", "Turma", "Descrição Turma", "Chave Organização", "Estado", "Estado", "Campo SAP 01"
     ];
 
-    /// <summary>Exportação do SAP fictícia da Trapiche (aba Data, todas as células como texto).</summary>
+    /// <summary>
+    /// Exportação do SAP fictícia da Trapiche (aba Data, todas as células como texto). Sem lista informada: os
+    /// funcionários e, no fim, as linhas de autônomos (<see cref="Autonomous"/>), como na exportação real.
+    /// </summary>
     public static byte[] EmployeesXlsx(IEnumerable<DemoEmployee>? employees = null)
     {
-        var rows = (employees ?? Employees).Select(e => new object[]
+        var rows = (employees ?? Employees.Concat(Autonomous)).Select(e => new object[]
         {
             e.Number, e.Name, e.Cpf, "Ativo", e.Group, e.JobCode, e.JobName, e.DeptCode, e.DeptName,
             e.Admission, "", "999", e.Group == "Campo" ? "TURMA A" : "", e.Unit, "PE FICTICIO", "Solteiro FICTICIO", "FICTICIO"
@@ -67,8 +91,8 @@ public static class TrapicheDemoSpreadsheets
     ];
 
     /// <summary>
-    /// Planilha de penalidades fictícia. A GERÊNCIA é o NOME da gerência da Trapiche: como a importação de funcionários
-    /// cria as gerências com o código como nome, aqui ela é "TRAP131"/"TRAP132".
+    /// Planilha de penalidades fictícia. A GERÊNCIA é a Chave Organização do funcionário (TRAP220, TRAP230), que a
+    /// importação do histórico reconhece como o nome da gerência.
     /// </summary>
     public static byte[] HistoryXlsx(IEnumerable<DemoHistory>? history = null, Func<DemoHistory, string>? unitOf = null)
     {

@@ -20,7 +20,7 @@ namespace SIGH.UnitTests.Persistence;
 
 public class DatabaseSeederTests
 {
-    private const string AdminEmail = "admin@sigh.com.br";
+    private const string AdminEmail = "admin@sigh.test";
 
     private static SighDbContext CreateContext(string dbName) =>
         new(new DbContextOptionsBuilder<SighDbContext>().UseInMemoryDatabase(dbName).Options);
@@ -48,7 +48,7 @@ public class DatabaseSeederTests
 
         var provisioner = new CompanyAdminProvisioner(
             context, hasher.Object, random.Object, clock.Object, (links ?? new Mock<IAccountSetupLinkSender>()).Object,
-            Mock.Of<ISecurityAuditLogger>(), Options.Create(new AuthOptions { AllowedEmailDomains = ["sigh.com.br"] }),
+            Mock.Of<SIGH.Application.Email.IEmailOutbox>(), Mock.Of<ISecurityAuditLogger>(), Options.Create(new AuthOptions { AllowedEmailDomains = ["sigh.test"] }),
             NullLogger<CompanyAdminProvisioner>.Instance);
 
         return new DatabaseSeeder(context, hasher.Object, configuration, NullLogger<DatabaseSeeder>.Instance, provisioner);
@@ -152,7 +152,7 @@ public class DatabaseSeederTests
 
         await using (var context = CreateContext(dbName))
         {
-            var act = () => CreateSeeder(context, adminPassword: "Senha@Inicial1", adminEmail: "outro.admin@sigh.com.br").SeedAsync();
+            var act = () => CreateSeeder(context, adminPassword: "Senha@Inicial1", adminEmail: "outro.admin@sigh.test").SeedAsync();
 
             await act.Should().NotThrowAsync();
             (await context.Users.Select(u => u.Email).ToListAsync()).Should().Equal(AdminEmail);

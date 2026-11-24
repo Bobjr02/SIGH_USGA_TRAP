@@ -57,7 +57,7 @@ public class MultiCompanyRulesTests : IntegrationTestBase
     private Task<TestUser> TrapAdminAsync(string email = "admin.trap@sigh.test") =>
         AccessTestHelpers.CreateUserAsync(Factory, email, [new RoleGrant(SystemRoles.Administrator, CompanyId: Trap)]);
 
-    /// <summary>Importa as planilhas fictícias da Trapiche (cria TRAP131 e TRAP132) como o administrador dela.</summary>
+    /// <summary>Importa a planilha fictícia da Trapiche (TRAP, TRAP180, TRAP220, TRAP230 e 2 autônomos ignorados) como o administrador dela.</summary>
     private async Task ImportTrapicheEmployeesAsync(HttpClient trapAdmin)
     {
         var file = TrapicheDemoSpreadsheets.EmployeesXlsx();
@@ -189,7 +189,7 @@ public class MultiCompanyRulesTests : IntegrationTestBase
         await TrapAdminAsync();
         using var trapAdmin = await AccessTestHelpers.LoginAsync(Factory, "admin.trap@sigh.test");
         await ImportTrapicheEmployeesAsync(trapAdmin);
-        var target = await AccessTestHelpers.CreateUserAsync(Factory, "gestor.trap131@sigh.test", [new RoleGrant(SystemRoles.HrRegistrar, CompanyId: Trap)], "USGA131");
+        var target = await AccessTestHelpers.CreateUserAsync(Factory, "gestor.trap220@sigh.test", [new RoleGrant(SystemRoles.HrRegistrar, CompanyId: Trap)], "USGA131");
         var manager = await RoleIdAsync(trapAdmin, SystemRoles.Manager);
 
         // Tem a USGA131 (da USGA), não uma gerência da Trapiche: o Gestor na Trapiche é recusado.
@@ -206,9 +206,9 @@ public class MultiCompanyRulesTests : IntegrationTestBase
         }
 
         var units = (await trapAdmin.GetFromJsonAsync<Result<List<ManagementUnitDto>>>("/api/v1/management-units"))!.Data!;
-        units.Select(u => u.Code).Should().BeEquivalentTo(["TRAP131", "TRAP132"], "a Trapiche começa sem gerências e a importação cria as dela");
+        units.Select(u => u.Code).Should().BeEquivalentTo(["TRAP220", "TRAP230"], "a Trapiche começa sem gerências e a importação cria as dela");
         units.Should().OnlyContain(u => u.Name == u.Code, "criadas com o código como nome");
-        (await trapAdmin.PostAsJsonAsync($"/api/v1/users/{target.Id}/management-units", new AssignManagementUnitRequest(units.Single(u => u.Code == "TRAP131").Id, null, null))).EnsureSuccessStatusCode();
+        (await trapAdmin.PostAsJsonAsync($"/api/v1/users/{target.Id}/management-units", new AssignManagementUnitRequest(units.Single(u => u.Code == "TRAP220").Id, null, null))).EnsureSuccessStatusCode();
         (await trapAdmin.PostAsJsonAsync($"/api/v1/users/{target.Id}/roles", new AssignRoleRequest(manager, null, null))).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
@@ -338,6 +338,34 @@ public class MultiCompanyRulesTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task TheTrapicheFile_AcceptsBothKeyFormats_IgnoresTheAutonomousRows_AndCreatesNoUnit()
+    {
+        await TrapAdminAsync();
+        using var trapAdmin = await AccessTestHelpers.LoginAsync(Factory, "admin.trap@sigh.test");
+        var file = TrapicheDemoSpreadsheets.EmployeesXlsx();
+
+        var response = await CompanyScenario.PostFileAsync(trapAdmin, "/api/v1/employees/import/preview", file);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await BodyAsync(response));
+        var preview = (await response.Content.ReadFromJsonAsync<Result<EmployeeImportPreviewDto>>())!.Data!;
+        preview.IgnoredRows.Should().Be(2);
+        preview.Summary.TotalRows.Should().Be(TrapicheDemoSpreadsheets.Employees.Count + 2);
+        preview.Summary.Created.Should().Be(TrapicheDemoSpreadsheets.Employees.Count);
+        preview.Errors.Should().BeEmpty("autônomo não é erro");
+        preview.Warnings.Should().NotContain(w => w.Message.Contains(TrapicheDemoSpreadsheets.AutonomousUnit));
+        preview.OtherCompanyRows.Should().Be(0);
+        preview.LooksLikeOtherCompany.Should().BeFalse();
+        (await CompanyScenario.PostFileAsync(trapAdmin, $"/api/v1/employees/import/{preview.BatchId}/confirm", file, false)).EnsureSuccessStatusCode();
+
+        await using var scope = Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<SighDbContext>();
+        var codes = await db.Employees.Where(e => e.CompanyId == Trap).Join(db.ManagementUnits, e => e.ManagementUnitId, m => m.Id, (e, m) => m.Code).ToListAsync();
+        codes.Should().HaveCount(TrapicheDemoSpreadsheets.Employees.Count).And.OnlyContain(c => c == "TRAP" || c == "TRAP180" || c == "TRAP220" || c == "TRAP230");
+        (await db.ManagementUnits.Where(m => m.CompanyId == Trap).Select(m => m.Code).ToListAsync())
+            .Should().BeEquivalentTo(SIGH.Application.Employees.Common.OfficialManagementUnits.ForPrefix("TRAP").Select(u => u.Code),
+                "só as 8 chaves oficiais, criadas pelo seed; a importação não cria gerência (nem TRAPAUT)");
+    }
+
+    [Fact]
     public async Task ImportingAFileOfAnotherCompany_RejectsItsRows_ShowsTheAlert_AndCannotBeConfirmed()
     {
         await AccessTestHelpers.CreateUserAsync(Factory, "admin.usga@sigh.test", [new RoleGrant(SystemRoles.Administrator, CompanyId: Usga)]);
@@ -350,6 +378,7 @@ public class MultiCompanyRulesTests : IntegrationTestBase
         preview.CompanyName.Should().NotBeNullOrWhiteSpace();
         preview.LooksLikeOtherCompany.Should().BeTrue();
         preview.OtherCompanyRows.Should().Be(TrapicheDemoSpreadsheets.Employees.Count);
+        preview.IgnoredRows.Should().Be(2, "as linhas de autônomos (TRAPAUT) são ignoradas, nem contam para o alerta");
         preview.Errors.Should().HaveCount(TrapicheDemoSpreadsheets.Employees.Count)
             .And.OnlyContain(e => e.Message.Contains("gerência de outra empresa — confira se o arquivo é desta empresa"));
         preview.Summary.Created.Should().Be(0);
@@ -370,8 +399,9 @@ public class MultiCompanyRulesTests : IntegrationTestBase
         foreach (var (code, name) in new[] { ("FALTA", "Faltas injustificadas de forma recorrente"), ("EPI", "Falta de utilização do EPI"), ("ATRASO", "Atrasos reiterados") })
             await ReferenceData.InfractionTypeAsync(Factory, code, name, Trap);
 
-        // Uma linha com a GERÊNCIA de uma gerência só da USGA ("Industrial"): rejeitada como de outra empresa.
-        var history = TrapicheDemoSpreadsheets.HistoryXlsx(unitOf: h => h.Number == "70090007" ? "INDUSTRIAL" : h.Number == "70090009" ? "GERENCIA QUE NAO EXISTE" : "TRAP131");
+        // Uma linha com a GERÊNCIA de uma gerência só da USGA ("Manutenção" = Gerência de Manutenção): rejeitada como de outra
+        // empresa. "Industrial" agora existe nas duas (USGA131 e TRAP230) e é a da própria empresa.
+        var history = TrapicheDemoSpreadsheets.HistoryXlsx(unitOf: h => h.Number == "70090007" ? "MANUTENÇÃO" : h.Number == "70090009" ? "GERENCIA QUE NAO EXISTE" : "TRAP220");
         var response = await CompanyScenario.PostFileAsync(trapAdmin, "/api/v1/disciplinary-history/import/preview", history);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await BodyAsync(response));
         var preview = (await response.Content.ReadFromJsonAsync<Result<SIGH.Application.Disciplinary.History.HistoryImportPreviewDto>>())!.Data!;
@@ -380,7 +410,7 @@ public class MultiCompanyRulesTests : IntegrationTestBase
             .Which.Message.Should().Contain("gerência de outra empresa — confira se o arquivo é desta empresa");
         preview.Warnings.Should().Contain(w => w.EmployeeNumber == "70090009" && w.Message.Contains("usada a gerência atual"));
         preview.ToImport.Should().HaveCount(TrapicheDemoSpreadsheets.History.Count - 1);
-        preview.ToImport.Where(r => r.EmployeeNumber == "70090001").Should().OnlyContain(r => r.ManagementUnitCode == "TRAP131");
+        preview.ToImport.Where(r => r.EmployeeNumber == "70090001").Should().OnlyContain(r => r.ManagementUnitCode == "TRAP220");
         preview.LooksLikeOtherCompany.Should().BeFalse();
 
         (await CompanyScenario.PostFileAsync(trapAdmin, $"/api/v1/disciplinary-history/import/{preview.BatchId}/confirm", history)).EnsureSuccessStatusCode();

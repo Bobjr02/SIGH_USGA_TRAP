@@ -13,7 +13,7 @@ public class AuthDomainModelTests
         var user = new User
         {
             FullName = "João da Silva",
-            Email = "joao@sigh.com.br",
+            Email = "joao@sigh.test",
             Cpf = "12345678901",
             PasswordHash = "hashedpassword"
         };

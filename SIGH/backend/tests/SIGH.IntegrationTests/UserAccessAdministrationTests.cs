@@ -142,7 +142,9 @@ public class UserAccessAdministrationTests : IntegrationTestBase
     {
         using var admin = await AccessTestHelpers.FixtureAdminAsync(Factory);
         var units = (await admin.GetFromJsonAsync<Result<List<ManagementUnitDto>>>("/api/v1/management-units"))!.Data!;
-        units.Should().HaveCount(9);
+        units.Select(u => u.Code).Should().Equal(SIGH.Application.Employees.Common.OfficialManagementUnits.ForPrefix("USGA").Select(u => u.Code),
+            "as 12 chaves oficiais da USGA, na ordem de exibição");
+        units.Single(u => u.Code == "USGA").Name.Should().Be("Serra Grande Escritório");
 
         var id = units.Single(u => u.Code == "USGA131").Id;
         (await admin.PutAsJsonAsync($"/api/v1/management-units/{id}", new RenameManagementUnitRequest("Industrial (novo nome)")))

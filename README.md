@@ -131,20 +131,23 @@ Abra **http://localhost:8080** (Chrome ou Edge). A senha dos usuários abaixo é
 | `admin.usga@demo.local`, `auxiliar.usga@demo.local`, `encarregado.usga@demo.local`, `gestor.usga131@demo.local` | USGA · Administrador, RH – Registro, RH – Aprovador, Gestor da USGA131 | Os mesmos papéis acima, com o nome da empresa na faixa do topo |
 | `admin.grupo@demo.local` | **USGA e Trapiche** · Administrador | O seletor **Empresa**; em **Todas**, **Usuários** com a coluna Empresa e as telas de importação só para consulta (lotes das duas empresas com a coluna Empresa e o aviso **"Selecione uma empresa"**, sem envio de arquivo) |
 | `admin.trap@demo.local` | Trapiche · Administrador | Só os usuários da Trapiche; em **Usuários → Novo usuário** com o e-mail de alguém da USGA, a opção **Vincular este usuário à Trapiche** |
-| `auxiliar.trap@demo.local`, `encarregado.trap@demo.local`, `gestor.trap131@demo.local` | Trapiche · RH – Registro, RH – Aprovador, Gestor da TRAP131 | As medidas e os funcionários fictícios da Trapiche (TRAP131/TRAP132) |
+| `auxiliar.trap@demo.local`, `encarregado.trap@demo.local`, `gestor.trap220@demo.local` | Trapiche · RH – Registro, RH – Aprovador, Gestor da TRAP220 | As medidas e os funcionários fictícios da Trapiche (TRAP, TRAP180, TRAP220 e TRAP230); o gestor, só os da TRAP220 |
 | `admin@demo.local` | USGA · Administrador (o primeiro, do seed) | Entra com a senha de demonstração: na demonstração (e só nela) a carga de dados usa, internamente, o link de definição de senha que o seed enviou. Fora da demonstração ninguém conhece a senha dele: ele a define pelo e-mail **"Acesso de administrador no SIGH"**. Vê **Auditoria de acesso** e, em **Administração**, Usuários, Gerências, Importar funcionários, Importar histórico e Motivos. **Nenhuma** tela de funcionários, medidas, painel ou relatórios |
 
 Os administradores (`admin@`, `admin.usga@`, `admin.grupo@`, `admin.trap@`) só gerenciam **acessos**: não veem
 funcionários, medidas, anexos, painel, relatórios, exportações, avisos nem a auditoria de medidas (a API responde 403).
 Continuam importando funcionários e histórico.
 
-Os dados de demonstração da **USGA** têm 40 funcionários fictícios, o **histórico disciplinar fictício** importado da
+Os dados de demonstração da **USGA** têm 43 funcionários fictícios (os 40 da carga do pacote de referência e mais 3 nas
+chaves USGA, USGA010 e USGA161, acrescentados em memória por `SIGH.Demo/UsgaDemoSpreadsheet.cs`), o **histórico disciplinar fictício** importado da
 planilha de penalidades (14 registros, com o selo "Histórico importado") e 8 medidas do SIGH em todos os estados
 (aprovadas, uma suspensão, pendentes, uma rejeitada aguardando correção, uma cancelada e uma com carta em PDF
 anexada). No funcionário 50090007, a aba **Apoio à decisão** mostra o histórico separado das medidas do SIGH.
-A **Trapiche** tem 12 funcionários fictícios (gerências TRAP131 e TRAP132, nomes terminando em "TESTE"), 5 registros de
-histórico e 5 medidas (aprovadas, uma suspensão, pendente, rejeitada e cancelada), todos de planilhas **geradas por
-código** (`SIGH/backend/src/SIGH.Demo/TrapicheDemoSpreadsheets.cs`), sem nenhum arquivo versionado. Tudo o que é de
+A **Trapiche** tem 15 funcionários fictícios (6 na TRAP220, 6 na TRAP230, 2 na TRAP e 1 na TRAP180, nomes terminando
+em "TESTE"), 5 registros de histórico e 5 medidas (aprovadas, uma suspensão, pendente, rejeitada e cancelada), todos de
+planilhas **geradas por código** (`SIGH/backend/src/SIGH.Demo/TrapicheDemoSpreadsheets.cs`), sem nenhum arquivo
+versionado. A exportação fictícia da Trapiche traz também 2 linhas de autônomos (`TRAPAUT`), que a importação ignora: a
+pré-visualização mostra **"2 linhas de autônomos ignoradas"**. Tudo o que é de
 demonstração fica no projeto `SIGH.Demo` (com o `DocumentFormat.OpenXml`, MIT), fora da API: o seeder só é registrado e
 executado com `Seed:DemoData=true`, então em produção nada dele, nem o OpenXml, chega a ser carregado.
 O tema escuro é o padrão; o botão de lua (no topo) troca para o claro. As capturas de todas as telas, nos dois
@@ -295,7 +298,7 @@ Em desenvolvimento a API usa o Mailpit. Para ver os e-mails:
   senha usa "Esqueci minha senha". Registrado na auditoria (`Security.AccountSetupLinkSent`).
 - **Domínios**: contas novas só com e-mail `@usga.com.br` (`Auth:AllowedEmailDomains:0`, `:1`...; subdomínio não vale).
   A demonstração (`compose.app.yml`) aceita também os domínios fictícios dos testes (`demo.local`, `e2e.local`,
-  `sigh.local`, `sigh.com.br`); os testes de integração, `sigh.com`, `sigh.test` e `demo.local`. Vincular à empresa uma
+  `sigh.local`, `sigh.test`); os testes de integração, `sigh.com`, `sigh.test` e `demo.local`. Vincular à empresa uma
   conta que já existe não depende do domínio.
 - `POST /api/v1/auth/forgot-password` sempre responde a mesma mensagem (sem revelar se o e-mail existe), com rate limit
   próprio. O link (`/reset-password?token=...`) é de uso único, guardado como hash e vale `Auth:PasswordResetTokenMinutes`
@@ -338,7 +341,15 @@ docker compose -p sigh-local -f compose.app.yml exec api dotnet SIGH.Api.dll adm
   enviada pela API em execução.
 - **Só existe na linha de comando**: não há endpoint (o teste `AdminRecover_HasNoHttpEndpoint` confere).
 - Registrado na auditoria (`Security.AdministratorRecovered`, origem **"linha de comando"**, sem usuário).
+- Se a empresa já tem outros administradores vigentes, cada um recebe o e-mail **"Novo administrador no SIGH -
+  <empresa>"**, avisando que um administrador foi concedido pela linha de comando, a quem (nome e e-mail) e quando
+  (horário de Brasília). O aviso não traz link nem senha.
 - Saída: 0 (feito), 1 (uso incorreto), 2 (recusado: empresa inexistente ou e-mail fora dos domínios aceitos).
+- **CPF técnico**: a conta criada pelo seed ou pelo `admin-recover` precisa de um CPF, mas não é de uma pessoa do RH.
+  Ela recebe um CPF da faixa técnica `000000000` + 2 dígitos (`00000000000`, `00000000002`…`00000000099`), diferente
+  para cada conta (índice único em `Users.Cpf`). Nenhum passa na validação de CPF real; a API devolve o CPF vazio nessas
+  contas (lista e detalhe de usuários), a busca por CPF não os encontra e o cadastro manual de usuário recusa a faixa.
+  Funcionários, relatórios e exportações não usam o CPF de usuário.
 
 #### Alerta de administrador
 Na tela **Usuários**, um alerta aparece quando a empresa ativa tem **um só Administrador vigente**, ou quando o acesso
@@ -361,7 +372,7 @@ lotes de importação, avisos, auditoria e administradores. O e-mail (todos @usg
 | Chave | Exemplo | Observação |
 | --- | --- | --- |
 | `Seed:Companies:<código>:Name` | `Trapiche` | nome de exibição; só vale na criação (depois é editável no banco) |
-| `Seed:Companies:<código>:ManagementUnitPrefix` | `TRAP` | prefixo das Chaves Organização da empresa (`TRAP131`) |
+| `Seed:Companies:<código>:ManagementUnitPrefix` | `TRAP` | prefixo das Chaves Organização da empresa (`TRAP` e `TRAP220`) |
 | `Seed:CompanyAdmins:N:CompanyCode` / `Email` / `Name` | `TRAP` / `admin.trap@usga.com.br` | primeiro administrador da empresa, sem senha (veja "Primeiro administrador de cada empresa") |
 
 - O seed cria só o que falta: a USGA usa o Id da antiga empresa padrão (`00000000-…-0001`); a Trapiche, o Id
@@ -369,8 +380,41 @@ lotes de importação, avisos, auditoria e administradores. O e-mail (todos @usg
 - **Primeiro administrador**: por `Seed:CompanyAdmins`, com o link de definição de senha por e-mail (ninguém conhece a
   senha). Se o e-mail já existe (a mesma pessoa administra as duas), ela só recebe o perfil Administrador na empresa
   nova. Empresa que já tem administrador não muda.
-- **Gerências**: as da USGA vêm de `Seed:ManagementUnits` (sem mudança). A Trapiche começa **sem** gerências: a primeira
-  importação de funcionários cria as dela, com o código como nome (os códigos reais ainda serão levantados).
+- **Gerências (chaves organizacionais)**: a lista oficial do cliente, 20 chaves, fica no código
+  (`SIGH.Application/Employees/Common/OfficialManagementUnits.cs`). O seed cria ou atualiza cada uma **por código**, na
+  empresa do seu prefixo, ativa e com o nome oficial (o nome oficial substitui o do seed antigo e o nome provisório que a
+  importação dava, o próprio código; um nome editado na tela **Gerências** é mantido e o log registra o nome oficial).
+  Chave que está no banco e não está na lista é **desativada** se não tiver funcionários, medidas nem gestores
+  vinculados; se tiver, continua ativa e o log registra um aviso com o código e as quantidades. Nada é apagado. A
+  importação **não cria** gerências.
+
+  | Empresa | Chave | Nome |
+  |---|---|---|
+  | USGA | `USGA` | Serra Grande Escritório |
+  | USGA | `USGA010` | Superintendência |
+  | USGA | `USGA131` | Gerência Industrial |
+  | USGA | `USGA132` | Gerência de Manutenção |
+  | USGA | `USGA133` | Gerência de Engenharia Civil |
+  | USGA | `USGA134` | Gerência Automotiva |
+  | USGA | `USGA135` | Gerência Administrativa |
+  | USGA | `USGA136` | Gerência de Assistência Social |
+  | USGA | `USGA137` | Gerência Agrícola |
+  | USGA | `USGA138` | Gerência de Patrimônio |
+  | USGA | `USGA141` | Gerência Agrícola Rural |
+  | USGA | `USGA161` | Escritório Maceió |
+  | Trapiche | `TRAP` | Trapiche Recife |
+  | Trapiche | `TRAP180` | Diretoria |
+  | Trapiche | `TRAP220` | Gerência Administrativa |
+  | Trapiche | `TRAP230` | Gerência Industrial |
+  | Trapiche | `TRAP240` | Gerência Automotiva |
+  | Trapiche | `TRAP250` | Gerência de Relação do Trabalho |
+  | Trapiche | `TRAP260` | Gerência Agrícola |
+  | Trapiche | `TRAP300` | Administração Usina |
+
+  **Formato** (`SIGH.Domain/Employees/ManagementUnitCodes.cs`, e `src/utils/managementUnits.ts` no front): só dois, em
+  maiúsculas e sem espaços — o prefixo da empresa sozinho (`USGA`, `TRAP`) ou o prefixo seguido de exatamente 3 dígitos
+  (`USGA010`, `TRAP180`). `TRAP12`, `TRAP1234`, `USGATRAP`, `TRAP 230` e `trap230` não valem. Nas telas, a chave sem
+  sufixo vem primeiro e depois os números em ordem (USGA, USGA010, USGA131…; TRAP, TRAP180…TRAP300).
 - **Migration `MultiCompany`**: tudo o que existia (perfis, usuários, motivos, lotes, estado do histórico, auditoria)
   vai para a USGA; a Trapiche é criada e recebe uma **cópia dos motivos ativos** da USGA. Índices únicos passam a ser
   por empresa (matrícula, CPF, código de gerência, código de motivo, chave do histórico; perfil por usuário + perfil +
@@ -407,9 +451,14 @@ lotes de importação, avisos, auditoria e administradores. O e-mail (todos @usg
 - **Importações** (funcionários e histórico): sempre para a empresa ativa ("Importando para: Trapiche"); o lote grava
   a empresa. Linha com Chave Organização (ou GERÊNCIA, no histórico) de outra empresa é rejeitada com "gerência de outra
   empresa — confira se o arquivo é desta empresa"; com mais da metade das linhas assim, a pré-visualização mostra o
-  alerta **"Este arquivo parece ser de outra empresa"** e a confirmação é recusada. No histórico, a GERÊNCIA é comparada
-  com os nomes das gerências da empresa (na Trapiche, as criadas pela importação de funcionários); nome desconhecido
-  gera aviso e usa a gerência atual do funcionário. O encerramento da importação de histórico é por empresa.
+  alerta **"Este arquivo parece ser de outra empresa"** e a confirmação é recusada. Chave com o prefixo da empresa,
+  mas fora do formato, fora da lista oficial ou inativa, é erro da linha, com a mensagem dizendo qual dos três. No
+  histórico, a GERÊNCIA é comparada com a chave e o nome das gerências ativas da empresa (com ou sem o "Gerência"/"Gerência
+  de" do nome oficial, e os nomes antigos das planilhas, como "AGRÍCOLA URBANO" = USGA137); nome desconhecido gera aviso e
+  usa a gerência atual do funcionário. O encerramento da importação de histórico é por empresa.
+- **Autônomos** não fazem parte do SIGH: as linhas com Chave Organização de `Import:IgnoredManagementUnitCodes` (padrão
+  `["TRAPAUT"]`) são ignoradas na importação de funcionários — não entram, não contam como erro nem para o alerta de
+  outra empresa — e aparecem só no contador **"N linhas de autônomos ignoradas"** da pré-visualização.
 - **Funcionários**: matrícula única por empresa e regra de CPF dentro de cada empresa — a mesma pessoa pode existir nas
   duas, com cadastros e históricos separados.
 - **Avisos e e-mails** vão só para quem tem o perfil na empresa da medida, e o e-mail cita o nome da empresa (nunca o
@@ -457,7 +506,9 @@ Coluna obrigatória ausente bloqueia o arquivo com o nome dela; coluna opcional 
 
 Os arquivos fictícios do pacote (`SIGH/docs/referencias/importacao-funcionarios`) também estão em
 `SIGH/backend/tests/SIGH.IntegrationTests/Fixtures/Referencias`, onde o teste `LeiameReferenceImportTests` confere a tabela
-de resultados esperados do LEIAME linha a linha.
+de resultados esperados do LEIAME linha a linha. Desempenho: `EmployeeImportPerformanceTests` importa 6.000 linhas x 72 colunas e
+exige pré-visualização, confirmação e segunda pré-visualização abaixo de 15 s cada; roda **sozinho**, numa coleção xUnit
+sem paralelismo (executada depois das outras), para medir a importação e não a disputa com os outros testes.
 
 #### Funcionários e apoio à decisão
 - `/employees`: lista com busca por nome ou matrícula e filtros (situação, grupo, gerência, setor); CPF sempre mascarado

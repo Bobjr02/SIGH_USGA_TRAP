@@ -86,7 +86,7 @@ A base real é uma exportação do SAP: 1 aba (`Data`), 72 colunas, todas as cé
 - `Matrícula`: sempre 8 dígitos, única.
 - `CPF`: sempre 11 dígitos, sem máscara, pode começar com zero. Na base real, 1 CPF tem dígito verificador inválido.
 - `Grupo_Emp`: `Campo` ou `Industria`.
-- `Chave Organização`: `USGA131` a `USGA141`.
+- `Chave Organização`: `USGA131` a `USGA141` na amostra. A lista oficial do cliente tem 20 chaves (12 da USGA e 8 da Trapiche) em dois formatos: o prefixo da empresa sozinho (`USGA`, `TRAP`) ou o prefixo + 3 dígitos (`USGA010`, `TRAP180`); veja o README. A exportação da Trapiche tem o mesmo formato e traz também autônomos (`TRAPAUT`), que não fazem parte do SIGH e são ignorados.
 - Datas no formato dd/MM/yyyy.
 - O cabeçalho `Estado` aparece **duas vezes** (UF do RG e UF do endereço). O mapeamento por nome não pode quebrar com isso.
 
@@ -142,7 +142,7 @@ O acompanhamento das penalidades hoje é feito numa planilha com 1 aba e 14 colu
 | `PERÍODO DA SUSPENSÃO` | texto | "dd/MM/yyyy À dd/MM/yyyy" (com acento) ou vazio |
 | `NOME DO FUNCIONÁRIO`, `CARGO`, `SETOR` | texto | cópia do cadastro na época |
 | `DATA FIM DA SUSPENSÃO` | data ou vazio | |
-| `GERÊNCIA` | texto | nome da gerência; corresponde 1:1 à Chave Organização (ex.: "AGRÍCOLA URBANO" = USGA137) |
+| `GERÊNCIA` | texto | nome da gerência; corresponde 1:1 à Chave Organização (ex.: "AGRÍCOLA URBANO" = USGA137, hoje "Gerência Agrícola"; "MANUTENÇÃO" = USGA132, "Gerência de Manutenção") |
 | `INFRAÇÃO` | texto | "ADVERTÊNCIA" ou "SUSPENSÃO" |
 | `Nº ADVERTÊNCIA`, `Nº SUSPENSÃO` | número | contadores manuais; **não devem ser importados**, o sistema recalcula |
 

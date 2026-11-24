@@ -15,7 +15,7 @@ public class Company : AuditableEntity
     /// <summary>Nome de exibição (editável).</summary>
     public string Name { get; private set; } = string.Empty;
 
-    /// <summary>Prefixo das Chaves Organização (gerências) desta empresa: "USGA" em USGA131, "TRAP" em TRAP131.</summary>
+    /// <summary>Prefixo das Chaves Organização (gerências) desta empresa: "USGA" em USGA e USGA131, "TRAP" em TRAP e TRAP230.</summary>
     public string ManagementUnitPrefix { get; private set; } = string.Empty;
     public string? LegalName { get; private set; }
     public string? RegistrationNumber { get; private set; }
@@ -61,10 +61,8 @@ public class Company : AuditableEntity
         ManagementUnitPrefix = normalized;
     }
 
-    /// <summary>A Chave Organização pertence a esta empresa (começa com o prefixo, sem diferenciar maiúsculas)?</summary>
-    public bool OwnsManagementUnitCode(string? code) =>
-        !string.IsNullOrWhiteSpace(code) && !string.IsNullOrEmpty(ManagementUnitPrefix)
-        && code.Trim().StartsWith(ManagementUnitPrefix, StringComparison.OrdinalIgnoreCase);
+    /// <summary>A Chave Organização é desta empresa: o prefixo sozinho ou seguido de 3 dígitos (<see cref="ManagementUnitCodes"/>)?</summary>
+    public bool OwnsManagementUnitCode(string? code) => ManagementUnitCodes.IsValid(code, ManagementUnitPrefix);
 
     public void UpdateLegalName(string? legalName)
     {

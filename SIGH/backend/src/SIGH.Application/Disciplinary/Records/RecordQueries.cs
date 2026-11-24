@@ -329,9 +329,10 @@ public sealed partial class RecordQueries : IRecordQueries
         var unitIds = scope.ManagementUnitIds.ToList();
         var units = await _db.ManagementUnits.AsNoTracking()
             .Where(m => full.Contains(m.CompanyId) || unitIds.Contains(m.Id))
-            .OrderBy(m => m.Code)
             .Select(m => new OptionDto(m.Id, m.Code, m.Name))
             .ToListAsync(cancellationToken);
+        // Chave sem sufixo primeiro, depois os números (USGA, USGA010, USGA131…).
+        units = units.OrderBy(m => m.Code, SIGH.Domain.Employees.ManagementUnitCodes.Comparer).ThenBy(m => m.Name, StringComparer.CurrentCulture).ToList();
 
         var departments = await _db.Departments.AsNoTracking()
             .Where(d => full.Contains(d.CompanyId) || unitIds.Contains(d.ManagementUnitId))

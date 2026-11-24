@@ -30,11 +30,11 @@ describe('LoginPage', () => {
     // Sem sessão: vai para o login.
     expect(await screen.findByRole('heading', { name: 'Bem-vindo de volta!' })).toBeInTheDocument();
 
-    await fillAndSubmit('maria@sigh.com.br', 'Senha@123');
+    await fillAndSubmit('maria@sigh.test', 'Senha@123');
 
     expect(await screen.findByTestId('current-user-name')).toHaveTextContent('Maria Gestora');
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
-    expect(loginBody).toEqual({ email: 'maria@sigh.com.br', password: 'Senha@123', rememberMe: false });
+    expect(loginBody).toEqual({ email: 'maria@sigh.test', password: 'Senha@123', rememberMe: false });
     expect(tokenStore.get()).toBe('login-token');
     // Nada de tokens ou permissões em localStorage.
     expect(localStorage.length).toBe(0);
@@ -44,7 +44,7 @@ describe('LoginPage', () => {
     server.use(refreshFails(), http.post(`${API}/auth/login`, () => problem(400, 'E-mail ou senha inválidos.')));
 
     renderApp('/login');
-    await fillAndSubmit('maria@sigh.com.br', 'errada');
+    await fillAndSubmit('maria@sigh.test', 'errada');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('E-mail ou senha inválidos.');
     expect(screen.getByTestId('location')).toHaveTextContent('/login');
@@ -56,7 +56,7 @@ describe('LoginPage', () => {
     server.use(refreshFails(), http.post(`${API}/auth/login`, () => problem(400, lockout)));
 
     renderApp('/login');
-    await fillAndSubmit('maria@sigh.com.br', 'errada');
+    await fillAndSubmit('maria@sigh.test', 'errada');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(lockout);
   });
@@ -65,7 +65,7 @@ describe('LoginPage', () => {
     server.use(refreshFails(), http.post(`${API}/auth/login`, () => new HttpResponse(null, { status: 429 })));
 
     renderApp('/login');
-    await fillAndSubmit('maria@sigh.com.br', 'Senha@123');
+    await fillAndSubmit('maria@sigh.test', 'Senha@123');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/muitas tentativas/i);
   });
@@ -98,7 +98,7 @@ describe('LoginPage', () => {
     );
 
     renderApp('/login');
-    await fillAndSubmit('admin@sigh.com.br', 'Inicial@123');
+    await fillAndSubmit('admin@sigh.test', 'Inicial@123');
 
     expect(await screen.findByRole('heading', { name: 'Trocar senha' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/change-password'));

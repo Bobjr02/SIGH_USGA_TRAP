@@ -12,7 +12,7 @@ import { sapFile, syntheticCpf } from './support/xlsx';
 // - o admin.trap não vê usuários da USGA nem dados de funcionários (de empresa nenhuma).
 // O primeiro administrador da Trapiche vem do seed (Seed:CompanyAdmins, veja scripts/e2e-stack.sh): sem senha, com o
 // link de definição por e-mail.
-// Funcionários FICTÍCIOS gerados aqui (chaves TRAP131/TRAP132, nomes terminando em TESTE).
+// Funcionários FICTÍCIOS gerados aqui (chaves TRAP220/TRAP230, nomes terminando em TESTE).
 
 const TRAP_ADMIN_EMAIL = process.env.E2E_TRAP_ADMIN_EMAIL ?? 'admin.trap@e2e.local';
 
@@ -51,10 +51,10 @@ test('multiempresa: Trapiche isolada da USGA, aprovação por empresa, jurídico
   const usgaAdmin = await apiToken(request);
   const trapAdmin = await trapAdminSession(request);
 
-  // Dados FICTÍCIOS da Trapiche: a primeira importação cria as gerências TRAP131 e TRAP132.
+  // Dados FICTÍCIOS da Trapiche nas chaves oficiais TRAP220 e TRAP230 (criadas pelo seed, como as outras 18 da lista).
   await importEmployees(request, trapAdmin.token, sapFile([
-    { number: TRAP_EMPLOYEE, name: 'JOAO DA TRAPICHE TESTE', cpf: syntheticCpf('710900001'), mu: 'TRAP131' },
-    { number: '71090002', name: 'MARIA DA TRAPICHE TESTE', cpf: syntheticCpf('710900002'), mu: 'TRAP132', group: 'Campo' },
+    { number: TRAP_EMPLOYEE, name: 'JOAO DA TRAPICHE TESTE', cpf: syntheticCpf('710900001'), mu: 'TRAP220' },
+    { number: '71090002', name: 'MARIA DA TRAPICHE TESTE', cpf: syntheticCpf('710900002'), mu: 'TRAP230', group: 'Campo' },
   ]));
   const infraction = await request.post('/api/v1/infraction-types', {
     headers: authed(trapAdmin.token),

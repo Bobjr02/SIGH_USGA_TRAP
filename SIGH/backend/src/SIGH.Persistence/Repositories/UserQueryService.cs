@@ -45,7 +45,7 @@ public class UserQueryService : IUserQueryService
             dbQuery = dbQuery.Where(u =>
                 u.FullName.ToLower().Contains(term) ||
                 u.Email.ToLower().Contains(term) ||
-                u.Cpf.Contains(term));
+                (u.Cpf.Contains(term) && !u.Cpf.StartsWith(SIGH.Application.Users.Bootstrap.TechnicalCpf.Prefix)));
         }
 
         if (query.Status.HasValue)
@@ -68,7 +68,7 @@ public class UserQueryService : IUserQueryService
             u.Id,
             u.FullName,
             u.Email,
-            u.Cpf,
+            SIGH.Application.Users.Bootstrap.TechnicalCpf.ForDisplay(u.Cpf),
             u.Status.ToString(),
             u.MustChangePassword,
             u.UserRoles

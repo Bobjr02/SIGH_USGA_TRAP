@@ -9,7 +9,7 @@ const required = (name: string): string => {
   return value;
 };
 
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.com.br';
+const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@sigh.test';
 // A senha que o admin define pelo link; os demais specs (projeto "app") entram com ela.
 const NEW_PASSWORD = required('E2E_NEW_PASSWORD');
 

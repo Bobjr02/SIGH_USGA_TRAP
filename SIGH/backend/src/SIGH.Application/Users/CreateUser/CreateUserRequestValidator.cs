@@ -17,7 +17,9 @@ public class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
 
         RuleFor(x => x.Cpf)
             .NotEmpty().WithMessage("CPF é obrigatório.")
-            .Length(11).WithMessage("CPF deve conter exatamente 11 dígitos numéricos.");
+            .Length(11).WithMessage("CPF deve conter exatamente 11 dígitos numéricos.")
+            .Must(cpf => !SIGH.Application.Users.Bootstrap.TechnicalCpf.IsTechnical(cpf?.Trim()))
+            .WithMessage("CPF inválido: esta faixa é reservada às contas técnicas do sistema.");
 
         RuleFor(x => x.RoleIds)
             .NotEmpty().WithMessage("Atribua ao menos um perfil (Role) para o usuário.");

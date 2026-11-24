@@ -26,7 +26,7 @@ public class EmployeeTests
             jobTitleId: _validJobTitleId,
             managementUnitId: _validMgmtUnitId,
             initialStatus: EmployeeStatus.PendingAdmission,
-            corporateEmail: "carlos.silva@sigh.com.br"
+            corporateEmail: "carlos.silva@sigh.test"
         );
 
         employee.Should().NotBeNull();
@@ -36,7 +36,7 @@ public class EmployeeTests
         employee.Cpf.Should().Be("11144477735");
         employee.AdmissionDate.Should().Be(_validAdmissionDate);
         employee.Status.Should().Be(EmployeeStatus.PendingAdmission);
-        employee.CorporateEmail.Should().Be("carlos.silva@sigh.com.br");
+        employee.CorporateEmail.Should().Be("carlos.silva@sigh.test");
         employee.HasSystemAccess.Should().BeFalse();
     }
 
@@ -512,9 +512,9 @@ public class EmployeeTests
         var newMgmtUnitId = Guid.NewGuid();
         var newDeptId = Guid.NewGuid();
 
-        employee.UpdateCorporateData("gabriel.medina@sigh.com.br", newJobTitleId, newMgmtUnitId, newDeptId);
+        employee.UpdateCorporateData("gabriel.medina@sigh.test", newJobTitleId, newMgmtUnitId, newDeptId);
 
-        employee.CorporateEmail.Should().Be("gabriel.medina@sigh.com.br");
+        employee.CorporateEmail.Should().Be("gabriel.medina@sigh.test");
         employee.JobTitleId.Should().Be(newJobTitleId);
         employee.ManagementUnitId.Should().Be(newMgmtUnitId);
         employee.DepartmentId.Should().Be(newDeptId);

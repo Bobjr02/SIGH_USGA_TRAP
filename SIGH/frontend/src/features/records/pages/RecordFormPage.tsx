@@ -221,7 +221,7 @@ export const RecordFormPage: React.FC = () => {
 
           <Box>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              {plural(form.occurrenceDates.length, 'Data da ocorrência', 'Datas da ocorrência')}
+              {plural(form.occurrenceDates.length, 'Data da ocorrência', 'Datas das ocorrências')}
             </Typography>
             {form.occurrenceDates.map((date, index) => (
               <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1 }}>

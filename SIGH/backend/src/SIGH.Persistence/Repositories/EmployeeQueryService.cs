@@ -260,9 +260,10 @@ public class EmployeeQueryService : IEmployeeQueryService
         var unitIds = scope.ManagementUnitIds.ToList();
         var full = scope.FullCompanyIds.ToList();
         var units = await _context.ManagementUnits.AsNoTracking().Where(m => m.IsActive && (full.Contains(m.CompanyId) || unitIds.Contains(m.Id)))
-            .OrderBy(m => m.Code).ThenBy(m => m.Name)
             .Select(m => new OrganizationOptionDto(m.Id, m.Code, m.Name, null))
             .ToListAsync(cancellationToken);
+        // Chave sem sufixo primeiro, depois os números (USGA, USGA010, USGA131…; TRAP, TRAP180…).
+        units = units.OrderBy(m => m.Code, SIGH.Domain.Employees.ManagementUnitCodes.Comparer).ThenBy(m => m.Name, StringComparer.CurrentCulture).ToList();
         var departments = await _context.Departments.AsNoTracking().Where(d => d.IsActive && (full.Contains(d.CompanyId) || unitIds.Contains(d.ManagementUnitId)))
             .OrderBy(d => d.Name)
             .Select(d => new OrganizationOptionDto(d.Id, d.Code, d.Name, d.ManagementUnitId))

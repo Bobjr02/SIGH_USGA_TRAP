@@ -54,7 +54,7 @@ public class GetUserByIdService : IGetUserByIdService
             user.Id,
             user.FullName,
             user.Email,
-            user.Cpf,
+            SIGH.Application.Users.Bootstrap.TechnicalCpf.ForDisplay(user.Cpf),
             user.Status.ToString(),
             user.MustChangePassword,
             user.FailedLoginAttempts,

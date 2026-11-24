@@ -25,7 +25,7 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
         var depts = await _context.Departments.AsNoTracking().Where(d => d.CompanyId == companyId && d.Code != null)
             .Select(d => new { d.Id, Code = d.Code!, d.Name }).ToListAsync(cancellationToken);
         var mus = await _context.ManagementUnits.AsNoTracking().Where(m => m.CompanyId == companyId && m.Code != null)
-            .Select(m => new { m.Id, Code = m.Code! }).ToListAsync(cancellationToken);
+            .Select(m => new { m.Id, Code = m.Code!, m.IsActive }).ToListAsync(cancellationToken);
 
         var jobCode = jobs.ToDictionary(j => j.Id, j => j.Code);
         var deptCode = depts.ToDictionary(d => d.Id, d => d.Code);
@@ -49,7 +49,8 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
         var references = new ReferenceSnapshot(
             jobs.GroupBy(j => j.Code, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase),
             depts.GroupBy(d => d.Code, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase),
-            mus.Select(m => m.Code).ToHashSet(StringComparer.OrdinalIgnoreCase));
+            mus.Where(m => m.IsActive).Select(m => m.Code).ToHashSet(StringComparer.OrdinalIgnoreCase),
+            mus.Where(m => !m.IsActive).Select(m => m.Code).ToHashSet(StringComparer.OrdinalIgnoreCase));
 
         return (snapshots, references);
     }
@@ -74,14 +75,8 @@ public sealed class EmployeeImportStore : IEmployeeImportStore
             await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
-            // 1. Dados de referência (gerências, cargos, setores).
-            var mus = await _context.ManagementUnits.Where(m => m.CompanyId == companyId && m.Code != null).ToListAsync(cancellationToken);
-            foreach (var code in plan.NewManagementUnits)
-            {
-                var mu = ManagementUnit.Create(companyId, code, code);
-                _context.ManagementUnits.Add(mu);
-                mus.Add(mu);
-            }
+            // 1. Dados de referência (cargos e setores; as gerências são só as da lista oficial, nunca criadas aqui).
+            var mus = await _context.ManagementUnits.Where(m => m.CompanyId == companyId && m.Code != null && m.IsActive).ToListAsync(cancellationToken);
             var muByCode = mus.GroupBy(m => m.Code!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
 
             var jobs = await _context.JobTitles.Where(j => j.CompanyId == companyId && j.Code != null).ToListAsync(cancellationToken);

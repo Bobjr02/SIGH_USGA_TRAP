@@ -38,7 +38,8 @@ public interface ICompanyAdminProvisioner
 
     /// <summary>
     /// Recuperação pelo TI (comando admin-recover, só na linha de comando do servidor): concede Administrador naquela
-    /// empresa MESMO que ela já tenha outro, reativa a conta se estiver inativa e envia o link. Entrada inválida lança
+    /// empresa MESMO que ela já tenha outro, reativa a conta se estiver inativa e envia o link. Os outros administradores
+    /// vigentes da empresa recebem um e-mail avisando quem recebeu o perfil e quando. Entrada inválida lança
     /// <see cref="BusinessRuleValidationException"/>.
     /// </summary>
     Task<CompanyAdminResult> RecoverAsync(CompanyAdminSeed seed, CancellationToken cancellationToken = default);
@@ -49,14 +50,12 @@ public sealed class CompanyAdminProvisioner : ICompanyAdminProvisioner
     public const string OriginPublication = "publicação";
     public const string OriginCommandLine = "linha de comando";
 
-    /// <summary>CPF técnico (não é de pessoa) dos administradores criados assim: o da USGA é o do seed antigo.</summary>
-    private const string FirstTechnicalCpf = "00000000000";
-
     private readonly IApplicationDbContext _db;
     private readonly IPasswordHasher _hasher;
     private readonly IRandomStringGenerator _random;
     private readonly IDateTimeProvider _clock;
     private readonly IAccountSetupLinkSender _links;
+    private readonly SIGH.Application.Email.IEmailOutbox _outbox;
     private readonly ISecurityAuditLogger _audit;
     private readonly AuthOptions _auth;
     private readonly ILogger<CompanyAdminProvisioner> _logger;
@@ -67,6 +66,7 @@ public sealed class CompanyAdminProvisioner : ICompanyAdminProvisioner
         IRandomStringGenerator random,
         IDateTimeProvider clock,
         IAccountSetupLinkSender links,
+        SIGH.Application.Email.IEmailOutbox outbox,
         ISecurityAuditLogger audit,
         IOptions<AuthOptions> auth,
         ILogger<CompanyAdminProvisioner> logger)
@@ -76,6 +76,7 @@ public sealed class CompanyAdminProvisioner : ICompanyAdminProvisioner
         _random = random;
         _clock = clock;
         _links = links;
+        _outbox = outbox;
         _audit = audit;
         _auth = auth.Value;
         _logger = logger;
@@ -163,7 +164,26 @@ public sealed class CompanyAdminProvisioner : ICompanyAdminProvisioner
         if (ValidateEmail(seed.Email) is { } problem)
             throw new BusinessRuleValidationException(problem);
 
-        return await GrantAsync(company, seed, SecurityAuditActions.AdministratorRecovered, OriginCommandLine, cancellationToken);
+        // Administradores vigentes ANTES da concessão (fora a própria conta): são eles que recebem o aviso.
+        var email = seed.Email.Trim().ToLowerInvariant();
+        var now = _clock.UtcNow;
+        var others = await UserAccessRules.CurrentAdministratorAssignments(_db, now, company.Id)
+            .Where(ur => ur.User.Email != email)
+            .Select(ur => new { ur.User.FullName, ur.User.Email })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var result = await GrantAsync(company, seed, SecurityAuditActions.AdministratorRecovered, OriginCommandLine, cancellationToken);
+
+        if (others.Count > 0)
+        {
+            var grantedName = await _db.Users.IgnoreQueryFilters().Where(u => u.Email == email).Select(u => u.FullName).FirstAsync(cancellationToken);
+            foreach (var admin in others)
+                _outbox.Enqueue(admin.Email, SIGH.Application.Email.EmailTemplates.AdministratorRecoveredNotice(admin.FullName, company.Name, grantedName, email, now));
+            await _db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("admin-recover: {Count} administradores da empresa {Code} avisados por e-mail.", others.Count, company.Code);
+        }
+        return result;
     }
 
     private Task<Company?> FindCompanyAsync(string code, CancellationToken cancellationToken) =>
@@ -243,16 +263,11 @@ public sealed class CompanyAdminProvisioner : ICompanyAdminProvisioner
             created ? "conta criada com o perfil Administrador" : "perfil Administrador concedido à conta existente");
     }
 
+    /// <summary>CPF técnico livre (<see cref="TechnicalCpf"/>; o primeiro, 00000000000, é o do administrador do seed antigo).</summary>
     private async Task<string> TechnicalCpfAsync(CancellationToken cancellationToken)
     {
-        for (var i = 0; i < 100; i++)
-        {
-            var cpf = i == 0 ? FirstTechnicalCpf : "000000000" + i.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
-            if (i == 1)
-                continue;
-            if (!await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Cpf == cpf, cancellationToken))
-                return cpf;
-        }
-        throw new InvalidOperationException("Não há CPF técnico livre para o administrador.");
+        var used = await _db.Users.IgnoreQueryFilters().Where(u => u.Cpf.StartsWith(TechnicalCpf.Prefix)).Select(u => u.Cpf).ToListAsync(cancellationToken);
+        return TechnicalCpf.Candidates().FirstOrDefault(c => !used.Contains(c))
+            ?? throw new InvalidOperationException("Não há CPF técnico livre para o administrador.");
     }
 }
