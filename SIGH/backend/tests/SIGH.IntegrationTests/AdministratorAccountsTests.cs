@@ -365,8 +365,10 @@ public class AdministratorAccountsTests : IntegrationTestBase
         var seedAdmin = technical.Single(u => u.Email == CustomWebApplicationFactory.SeedAdminEmail);
         var detail = JsonDocument.Parse(await (await admin.GetAsync($"/api/v1/users/{seedAdmin.Id}")).Content.ReadAsStringAsync()).RootElement;
         detail.GetProperty("data").GetProperty("cpf").GetString().Should().BeEmpty("a tela e a API não mostram o CPF técnico");
-        var list = await (await admin.GetAsync("/api/v1/users?pageSize=100")).Content.ReadAsStringAsync();
-        list.Should().NotContain(seedAdmin.Cpf);
+        var list = JsonDocument.Parse(await (await admin.GetAsync("/api/v1/users?pageSize=100")).Content.ReadAsStringAsync()).RootElement
+            .GetProperty("data").GetProperty("items").EnumerateArray().ToList();
+        list.Should().Contain(u => u.GetProperty("id").GetGuid() == seedAdmin.Id);
+        list.Select(u => u.GetProperty("cpf").GetString()).Should().OnlyContain(c => !TechnicalCpf.IsTechnical(c), "a lista não mostra CPF técnico");
         var search = JsonDocument.Parse(await (await admin.GetAsync($"/api/v1/users?searchTerm={seedAdmin.Cpf}")).Content.ReadAsStringAsync()).RootElement;
         search.GetProperty("data").GetProperty("items").GetArrayLength().Should().Be(0, "a busca por CPF não encontra o CPF técnico");
 
